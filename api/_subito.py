@@ -18,7 +18,7 @@ import os, re, json, base64, io, subprocess, shutil
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
-RETRIES = 6
+RETRIES = 8
 
 
 # ---------------------------------------------------------------- proxy ------
@@ -51,58 +51,90 @@ def proxy_url():
 
 
 # ---------------------------------------------------------------- fetch ------
-def _fetch_curlcffi(url, binary=False):
+TIMEOUT = 22
+
+
+def _cffi():
     try:
         from curl_cffi import requests as creq
+        return creq
     except ImportError:
         return None
-    px = proxy_url()
-    proxies = {"http": px, "https": px} if px else None
-    last = None
-    for _ in range(RETRIES):
-        try:
-            r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=45)
-            if r.status_code == 200:
-                if binary:
-                    return r.content
-                if "application/ld+json" in r.text or "og:title" in r.text:
-                    return r.text
-            last = r.status_code
-        except Exception as e:          # noqa: BLE001  (rotate & retry)
-            last = e
-    raise RuntimeError("curl_cffi fetch failed after %d tries (last=%s)" % (RETRIES, last))
 
 
-def _fetch_syscurl(url, binary=False):
-    """Fallback for local machines that have the curl binary but not curl_cffi."""
+def _syscurl_html(url):
+    """Local fallback (no curl_cffi): system curl through the proxy."""
     exe = shutil.which("curl") or shutil.which("curl.exe")
     if not exe:
         return None
     px = proxy_url()
-    base = [exe, "-sSL", "-A", UA, "-H", "Accept-Language: it-IT,it;q=0.9"]
+    cmd = [exe, "-sSL", "--max-time", str(TIMEOUT), "-A", UA,
+           "-H", "Accept-Language: it-IT,it;q=0.9"]
     if px:
-        base += ["-x", px]
-    last = None
+        cmd += ["-x", px]
+    out = subprocess.run(cmd + [url], capture_output=True)
+    return out.stdout.decode("utf-8", "replace") if out.returncode == 0 and out.stdout else None
+
+
+def _listing_id(url):
+    m = re.search(r"-(\d+)\.html?(?:[?#]|$)", url)
+    return m.group(1) if m else None
+
+
+def _is_right_page(html, lid):
+    """A valid listing page must have a Product card AND reference this exact ad id
+    (guards against redirects to home/search or a wrong cached page)."""
+    if not extract_ldjson(html):
+        return False
+    return (lid is None) or (lid in html)
+
+
+def fetch_html(url):
+    """Get the LISTING page and RETRY until it really contains THIS product's card.
+    Datacenter IPs (e.g. on a host) sometimes get a 200 'soft block' from Akamai
+    with no product data — we must retry (new proxy IP), never accept garbage."""
+    creq = _cffi()
+    px = proxy_url()
+    proxies = {"http": px, "https": px} if px else None
+    lid = _listing_id(url)
+    last = "нет данных"
     for _ in range(RETRIES):
-        out = subprocess.run(base + [url], capture_output=True)
-        if out.returncode == 0 and out.stdout and (binary or b"403" not in out.stdout[:200]):
-            if binary:
-                return out.stdout
-            txt = out.stdout.decode("utf-8", "replace")
-            if "application/ld+json" in txt or "og:title" in txt:
-                return txt
-        last = out.returncode
-    raise RuntimeError("curl fetch failed (last rc=%s)" % last)
+        try:
+            if creq:
+                r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=TIMEOUT)
+                if r.status_code == 200 and _is_right_page(r.text, lid):
+                    return r.text
+                last = "HTTP %s" % r.status_code if r.status_code != 200 else "не то объявление/блок"
+            else:
+                txt = _syscurl_html(url)
+                if txt and _is_right_page(txt, lid):
+                    return txt
+                last = "не то объявление/блок"
+        except Exception as e:          # noqa: BLE001  (rotate & retry)
+            last = type(e).__name__
+    raise RuntimeError("Subito не отдал объявление (%s). Нажмите «Собрать» ещё раз." % last)
 
 
-def fetch(url, binary=False):
-    r = _fetch_curlcffi(url, binary)
-    if r is not None:
-        return r
-    r = _fetch_syscurl(url, binary)
-    if r is not None:
-        return r
-    raise RuntimeError("no fetch backend available (install curl_cffi)")
+def fetch_image_bytes(url):
+    """Product image is on a CDN (not geo-blocked): try DIRECT first (fast),
+    fall back to the proxy only if needed."""
+    creq = _cffi()
+    if creq:
+        for use_proxy in (False, True):
+            px = proxy_url() if use_proxy else None
+            proxies = {"http": px, "https": px} if px else None
+            try:
+                r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=15)
+                if r.status_code == 200 and r.content:
+                    return r.content
+            except Exception:           # noqa: BLE001
+                pass
+    exe = shutil.which("curl") or shutil.which("curl.exe")
+    if exe:
+        out = subprocess.run([exe, "-sSL", "--max-time", "15", "-A", UA, url], capture_output=True)
+        if out.returncode == 0 and out.stdout:
+            return out.stdout
+    return None
 
 
 # ---------------------------------------------------------------- parse ------
@@ -151,10 +183,32 @@ def protezione(price, o):
     return round(min(o["prot_rate2"] * price, o["prot_cap"]), 2)
 
 
-def image_datauri(url, box=160):
+def to_price(v):
+    """Robustly turn a JSON-LD price (int/float/str, IT or EN format) into a float."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    if v is None:
+        return None
+    s = str(v).strip()
     try:
-        raw = fetch(url, binary=True)
-    except Exception:
+        return float(s)                       # "1100" or "1100.00"
+    except ValueError:
+        p = parse_price_num(s)                 # "1.100,00 €"
+        return p if p else None
+
+
+def price_of(prod):
+    off = prod.get("offers")
+    if isinstance(off, list):
+        off = off[0] if off else {}
+    if isinstance(off, dict):
+        return to_price(off.get("price"))
+    return None
+
+
+def image_datauri(url, box=160):
+    raw = fetch_image_bytes(url)
+    if not raw:
         return ""
     mime = "image/jpeg"
     try:
@@ -194,16 +248,14 @@ def fetch_data(url, opts=None):
     if opts:
         o.update({k: v for k, v in opts.items() if v is not None})
 
-    html = fetch(url)
+    html = fetch_html(url)                     # guaranteed to contain a Product card
     prod = extract_ldjson(html) or {}
-    name = prod.get("name") or meta(html, "og:title") or "Annuncio"
+    name = (prod.get("name") or meta(html, "og:title") or "Annuncio")
     name = re.sub(r"\s*\|\s*Subito\s*$", "", name).strip()
 
-    price = prod.get("offers", {}).get("price") if isinstance(prod.get("offers"), dict) else None
+    price = price_of(prod)                      # ONLY from the product's own offer
     if price is None:
-        m = re.search(r'"price"\s*:\s*"?([0-9.,]+)', html)
-        price = parse_price_num(m.group(1)) if m else 0
-    price = float(price)
+        price = 0.0                             # free/"Regalo" listing — not a random number
 
     img = prod.get("image")
     img_url = (img[0] if isinstance(img, list) else img) or meta(html, "og:image")

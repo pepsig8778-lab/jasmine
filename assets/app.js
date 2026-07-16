@@ -648,6 +648,11 @@
     var go = document.getElementById('pGo');
     if (!/subito\.it\//i.test(url)) { flash('Вставьте ссылку subito.it'); input.focus(); return; }
     go.disabled = true; go.textContent = 'Собираю…';
+    var ph = document.getElementById('pPlaceholder');
+    var el = document.getElementById('parserPreview');
+    el.style.display = 'none'; ph.style.display = 'block';
+    ph.innerHTML = '<span class="big">⏳</span>Собираю данные объявления…<br>обычно 3–6 секунд' +
+      '<br><small style="opacity:.6">(на бесплатном хостинге первый запрос после простоя — дольше)</small>';
     fetch('api/parse?url=' + encodeURIComponent(url)).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
     }).then(function (res) {
@@ -657,7 +662,9 @@
       renderParserOpts(); parserRender();
       flash('Готово: ' + (res.data.title || ''));
     }).catch(function (err) {
-      flash('Ошибка: ' + err.message + ' — запустите через start.bat');
+      ph.innerHTML = '<span class="big">⚠️</span>' + esc(err.message) +
+        '<br><small style="opacity:.7">Нажмите «Собрать» ещё раз.</small>';
+      flash('Ошибка: ' + err.message);
     }).then(function () { go.disabled = false; go.textContent = 'Собрать'; });
   }
   document.getElementById('pGo').addEventListener('click', parserLoad);
