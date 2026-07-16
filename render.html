@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Render · Acquista a distanza</title>
+<style>
+  html,body{margin:0;padding:0;background:#fff;}
+  /* The screen sits flush at 0,0 so a headless screenshot of the element
+     (or of the page clipped to the element box) is pixel-exact. */
+  #stage{display:inline-block;}
+</style>
+</head>
+<body>
+<div id="stage"><div class="screen" id="screen"></div></div>
+
+<script src="assets/config.js"></script>
+<script src="assets/builder.js"></script>
+<script>
+/* Inject the screenshot styles. */
+(function(){
+  var st = document.createElement('style');
+  st.textContent = window.SCREEN_CSS;
+  document.head.appendChild(st);
+})();
+
+/* Resolve config from, in priority order:
+ *   1) window.__CONFIG__  (set by an automation driver via page.evaluate)
+ *   2) ?data=<base64-encoded-JSON>   (URL-driven, good for batch rendering)
+ *   3) ?config=<url-encoded-JSON>
+ *   4) DEFAULT_CONFIG
+ */
+function resolveConfig(){
+  if (window.__CONFIG__) return window.mergeConfig(window.DEFAULT_CONFIG, window.__CONFIG__);
+  var q = new URLSearchParams(location.search);
+  try {
+    if (q.get('data')) {
+      var json = decodeURIComponent(escape(atob(q.get('data'))));
+      return window.mergeConfig(window.DEFAULT_CONFIG, JSON.parse(json));
+    }
+    if (q.get('config')) {
+      return window.mergeConfig(window.DEFAULT_CONFIG, JSON.parse(q.get('config')));
+    }
+  } catch (e) { console.error('Bad config param:', e); }
+  return window.DEFAULT_CONFIG;
+}
+
+var cfg = resolveConfig();
+window.renderScreen(document.getElementById('screen'), cfg);
+
+/* Expose a hook so a driver can re-render after the page has loaded:
+ *   await page.evaluate(c => window.applyConfig(c), myConfig)
+ */
+window.applyConfig = function(partial){
+  var merged = window.mergeConfig(window.DEFAULT_CONFIG, partial || {});
+  window.renderScreen(document.getElementById('screen'), merged);
+  return true;
+};
+
+/* Signal readiness for headless waiters. */
+document.documentElement.setAttribute('data-ready', '1');
+</script>
+</body>
+</html>

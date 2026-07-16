@@ -1,0 +1,14 @@
+{
+  "summary": {
+    "product": { "title": "Pikachu illustrator PSA 10 - PROMO" },
+    "rows": [
+      { "label": "Oggetto", "value": "5.400,00 €" },
+      { "label": "Spedizione", "value": "gratuita", "info": true, "muted": true },
+      { "label": "Protezione acquisti", "value": "162,00 €" },
+      { "label": "Sconto FEDELTA", "value": "- 100,00 €", "muted": true }
+    ],
+    "total": { "value": "5.462,00 €" }
+  },
+  "discount": { "value": "FEDELTA" },
+  "theme": { "red": "#0a7d33", "infoLink": "#0a7d33", "badgeText": "#0a7d33", "badgeBg": "#e6f4ea", "selectedBorder": "#0a7d33" }
+}

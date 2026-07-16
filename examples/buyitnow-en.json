@@ -1,0 +1,22 @@
+{
+  "header": { "title": "Buy it now" },
+  "summary": {
+    "title": "Order summary",
+    "product": { "title": "Charizard VMAX Rainbow Rare - 074/073" },
+    "rows": [
+      { "label": "Item", "value": "£ 1.250,00" },
+      { "label": "Shipping", "value": "from £ 4,99", "info": true, "muted": true },
+      { "label": "Buyer protection", "value": "£ 42,50" }
+    ],
+    "infoBox": { "show": true, "text": "Buyer Protection is calculated on the item price and applies to every order with TuttoSubito.", "link": "Learn more" },
+    "total": { "label": "Total", "value": "£ 1.292,49" }
+  },
+  "discount": { "title": "Add a discount code", "placeholder": "e.g. SAVE20" },
+  "shipping": {
+    "title": "Shipping method",
+    "options": [
+      { "selected": true, "title": "Pickup point", "price": "from £ 4,99", "button": "Find a pickup point" },
+      { "badge": "MOST CONVENIENT", "title": "Home delivery", "price": "£ 8,99", "carrier": "Royal Mail" }
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "summary": {
+    "product": {
+      "image": "data:image/jpeg;base64,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",
+      "title": "OROLOGIO SECTOR 240"
+    },
+    "rows": [
+      {
+        "label": "Oggetto",
+        "value": "90,00 €",
+        "info": false,
+        "muted": false
+      },
+      {
+        "label": "Spedizione",
+        "value": "a partire da 2,39 €",
+        "info": true,
+        "muted": true
+      },
+      {
+        "label": "Protezione acquisti",
+        "value": "5,70 €",
+        "info": false,
+        "muted": false
+      }
+    ],
+    "total": {
+      "label": "Totale",
+      "value": "98,09 €"
+    }
+  },
+  "shipping": {
+    "options": [
+      {
+        "kind": "pickup",
+        "selected": true,
+        "badge": "",
+        "title": "Punto di ritiro",
+        "price": "da 2,39 €",
+        "button": "Cerca punto di ritiro",
+        "carrier": "",
+        "carrierLogo": ""
+      },
+      {
+        "kind": "home",
+        "selected": false,
+        "badge": "SCELTA PIÙ COMODA",
+        "title": "Consegna a domicilio",
+        "price": "5,99 €",
+        "button": "",
+        "carrier": "Poste Italiane",
+        "carrierLogo": ""
+      }
+    ]
+  },
+  "qr": {
+    "show": true,
+    "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASYAAAEmAQAAAADnvwB3AAACp0lEQVR4nO1aW2ojMRAsWQZ/am6wR5FvFvZm8lH2BppPg0KHrtIMgf1Idgk47kwzGCUewtT0q6o7yfCxvZ4+cRNw3LXZ8SY2O97Ev70JmCkjK0oza6NY7vDL/AD4YTw/xmxmvQ7AOlCa/0iA1qu+fXKMJ/9Y05n+gjux3pdbWm73pZ6BlK4PfK4vvystN6zXe0pYX+zPFeX3+O+/9Q1jtSP36tcWtErD3CtQI+UjSkNpBFhHMS9BQfIRe13N/e/Lv4iBUeYVtdODLLCD6GQBMGa1Qsanf2411uO2BInVrLbYK91XR2n+RRyMJwD3pWJ9GcC52KXjQshjvV4c/u1xz/Wxfd6Pg9zGAxWVflTXcEY3Spi6Wm1rhWofk/N4vWkxas545zsjGx/FrMPM/RvDj26z2jg6bAAHqmAGwDgw887MewfPznkUsTFiFU7bwJbh4TpLkKdn0zkARqPX3qGjbWQgCkZzRUyvMThbNhLyQL0jq2UwDTUNEGRhjJGP2cTG264l+fvp0ygYbS87oj2emIzVMPkIike1CclJB0uMxuFAAIx5lh0qjll2HLgGAjEwmsoLVRU18iSu5ANB8tFm3jkczaxEy/dhcgCMQwdPPS81oje77oiBEUxAzR6p/dlKNAqIko+Z8sqjVLqDcsPPPFigugqScBUfDR6pPoL40ThpVOOgbOQcwDdZcWLVnJ1KGnNazvrDuG1hMMKLzIzMre9rKRBj9ohJ4EwLR4opHiaPjbLTgZtHKYXV5ADqIMH2VsZwnRHLrNwnkE+O8bTvkdMvG6tvjXO/sV3iNaXHPtdX+rG7Lua2kfNG5qOIXBhOnoWRo2OpD5GByfFiYDTKDc4efcchyez5GGf2CLe5O1ZF1YJATfP5YzUd/xP4zT10Ou6a9hPexBuU/D4pCF75JAAAAABJRU5ErkJggg==",
+    "data": "https://www.subito.it/abbigliamento-accessori/orologio-sector-240-udine-586280255.htm",
+    "ecl": "M",
+    "position": "corner",
+    "size": 88,
+    "caption": "Inquadra per aprire l'annuncio",
+    "top": 64,
+    "right": 26,
+    "x": 280,
+    "y": 96,
+    "bare": false,
+    "dark": "#000000",
+    "light": "#ffffff"
+  }
+}

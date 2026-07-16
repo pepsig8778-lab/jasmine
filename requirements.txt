@@ -1,0 +1,3 @@
+curl_cffi>=0.7
+qrcode>=7.4
+Pillow>=10.0
