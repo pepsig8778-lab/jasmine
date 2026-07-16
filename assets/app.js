@@ -117,8 +117,8 @@
     var thumb = v ? '<img class="thumb" src="' + esc(v) + '" alt="">' : '<span class="thumb empty">—</span>';
     return '<div class="fld file"><span class="fld-l">' + esc(label) + '</span>' +
       '<div class="file-row">' + thumb +
-      '<label class="btn sm file-btn">Carica<input type="file" accept="image/*" data-file="' + path + '"></label>' +
-      (v && opts.clear ? '<button class="btn sm ghost" data-act="clear" data-path="' + path + '">Rimuovi</button>' : '') +
+      '<label class="btn sm file-btn">Загрузить<input type="file" accept="image/*" data-file="' + path + '"></label>' +
+      (v && opts.clear ? '<button class="btn sm ghost" data-act="clear" data-path="' + path + '">Убрать</button>' : '') +
       '</div></div>';
   }
   function section(title, inner, open) {
@@ -181,9 +181,62 @@
           '" data-act="qrPos" data-pos="' + o[0] + '">' + o[1] + '</button>';
       }).join('') + '</div></div>';
   }
+  function qrPills(label, path, options) {
+    var cur = getPath(state, path);
+    return '<div class="fld"><span class="fld-l">' + esc(label) + '</span><div class="pills">' +
+      options.map(function (o) {
+        return '<button class="pill' + (String(cur) === String(o[0]) ? ' active' : '') +
+          '" data-act="qrpill" data-path="' + path + '" data-val="' + esc(o[0]) + '">' + esc(o[1]) + '</button>';
+      }).join('') + '</div></div>';
+  }
+  var QR_PRESETS = {
+    classic: { label: 'Классика', set: { moduleShape: 'square', eyeShape: 'square', gradient: 'none', dark: '#000000', light: '#ffffff', eyeColor: '', logo: '' } },
+    dots: { label: 'Точки', set: { moduleShape: 'dots', eyeShape: 'circle', gradient: 'none', dark: '#111827', light: '#ffffff', eyeColor: '' } },
+    rounded: { label: 'Скругл.', set: { moduleShape: 'rounded', eyeShape: 'rounded', gradient: 'none', dark: '#1f2937', light: '#ffffff', eyeColor: '' } },
+    gradient: { label: 'Градиент', set: { moduleShape: 'rounded', eyeShape: 'rounded', gradient: 'linear', dark: '#6a5cff', gradientColor: '#c026d3', gradientAngle: 45, light: '#ffffff', eyeColor: '' } },
+    neon: { label: 'Неон', set: { moduleShape: 'dots', eyeShape: 'circle', gradient: 'linear', dark: '#22d3ee', gradientColor: '#a855f7', light: '#0b1020', eyeColor: '#22d3ee' } },
+    ocean: { label: 'Океан', set: { moduleShape: 'rounded', eyeShape: 'circle', gradient: 'radial', dark: '#0ea5e9', gradientColor: '#1d4ed8', light: '#ffffff', eyeColor: '' } },
+    fire: { label: 'Огонь', set: { moduleShape: 'diamond', eyeShape: 'rounded', gradient: 'linear', dark: '#f59e0b', gradientColor: '#ef4444', gradientAngle: 90, light: '#ffffff', eyeColor: '#ef4444' } },
+    mono: { label: 'Инверт', set: { moduleShape: 'square', eyeShape: 'square', gradient: 'none', dark: '#ffffff', light: '#0b1020', eyeColor: '' } }
+  };
   function qrSection(q) {
+    q = q || {};
+    var mode = q.mode || 'generated';
     var pos = q.position || 'block';
-    var thumb = q.image ? '<div class="qr-prev"><img src="' + esc(q.image) + '" alt=""></div>' : '';
+    var thumb = '<div class="qr-prev big"><img src="' + esc(q.image || '') + '" alt=""></div>';
+    var modeTabs = '<div class="pills mode">' +
+      '<button class="pill' + (mode === 'generated' ? ' active' : '') + '" data-act="qrMode" data-val="generated">⚙ Сгенерировать</button>' +
+      '<button class="pill' + (mode === 'custom' ? ' active' : '') + '" data-act="qrMode" data-val="custom">🖼 Своя картинка</button>' +
+      '</div>';
+
+    var genUI =
+      fText('Данные (ссылка или текст)', 'qr.data', { area: true, rows: 2 }) +
+      '<div class="fld"><span class="fld-l">Пресеты стиля</span><div class="pills wrap">' +
+        Object.keys(QR_PRESETS).map(function (k) {
+          return '<button class="pill" data-act="qrPreset" data-preset="' + k + '">' + esc(QR_PRESETS[k].label) + '</button>';
+        }).join('') + '</div></div>' +
+      qrPills('Форма модулей', 'qr.moduleShape', [['square', 'Квадраты'], ['dots', 'Точки'], ['rounded', 'Скругл.'], ['diamond', 'Ромбы']]) +
+      qrPills('Форма «глаз»', 'qr.eyeShape', [['square', 'Квадрат'], ['rounded', 'Скругл.'], ['circle', 'Круг']]) +
+      '<div class="grid2">' + fColor('Цвет модулей', 'qr.dark') + fColor('Фон', 'qr.light') + '</div>' +
+      '<div class="grid2">' + fColor('Цвет «глаз»', 'qr.eyeColor') +
+        fSelect('Градиент', 'qr.gradient', [{ v: 'none', l: 'Нет' }, { v: 'linear', l: 'Линейный' }, { v: 'radial', l: 'Радиальный' }]) + '</div>' +
+      (q.gradient && q.gradient !== 'none'
+        ? '<div class="grid2">' + fColor('Цвет 2', 'qr.gradientColor') + fRange('Угол', 'qr.gradientAngle', 0, 360, 5) + '</div>' : '') +
+      '<div class="grid2">' + fSelect('Коррекция', 'qr.ecl', [
+        { v: 'L', l: 'L 7%' }, { v: 'M', l: 'M 15%' }, { v: 'Q', l: 'Q 25%' }, { v: 'H', l: 'H 30%' }]) +
+        fRange('Отступ (модули)', 'qr.margin', 0, 10, 1) + '</div>' +
+      '<div class="sub">Логотип по центру</div>' +
+      fFile('Картинка логотипа', 'qr.logo', { clear: true }) +
+      (q.logo ? fRange('Размер лого', 'qr.logoScale', 0.1, 0.33, 0.01) : '') +
+      '<div class="qr-actions">' +
+        '<button class="btn sm ghost" data-act="qrRegen">Обновить QR</button>' +
+        '<button class="btn sm ghost" data-act="qrDownload">Скачать QR</button></div>';
+
+    var customUI =
+      '<div class="hint">Загрузите свою картинку QR — она будет использоваться «как есть», ' +
+      'и в парсере тоже <b>не заменяется</b> сгенерированным.</div>' +
+      fFile('Своя картинка QR', 'qr.custom', { clear: true });
+
     var posFields =
       pos === 'corner' ? '<div class="grid2">' + fNum('Отступ сверху', 'qr.top', 0, 1200, 1) +
           fNum('Отступ справа', 'qr.right', 0, 400, 1) + '</div>'
@@ -191,19 +244,14 @@
           fNum('Y (сверху)', 'qr.y', 0, 1600, 1) + '</div>' + fCheck('Без рамки/фона', 'qr.bare') +
           '<div class="hint">💡 Перетаскивайте QR прямо на превью в любое место.</div>'
       : '';
+
     return fCheck('Показывать QR-код', 'qr.show') +
-      fText('Данные (URL или текст для кодирования)', 'qr.data', { area: true, rows: 2 }) +
-      thumb + posPills(pos) +
-      '<div class="grid2">' + fSelect('Коррекция', 'qr.ecl', [
-        { v: 'L', l: 'L 7%' }, { v: 'M', l: 'M 15%' }, { v: 'Q', l: 'Q 25%' }, { v: 'H', l: 'H 30%' }]) +
-        fRange('Размер', 'qr.size', 40, 260, 2) + '</div>' +
-      fText('Подпись', 'qr.caption') + posFields +
-      '<div class="grid2">' + fColor('Цвет QR', 'qr.dark') + fColor('Фон QR', 'qr.light') + '</div>' +
-      '<div class="qr-actions">' +
-        '<label class="btn sm file-btn">Свой QR<input type="file" accept="image/*" data-file="qr.image"></label>' +
-        '<button class="btn sm ghost" data-act="qrRegen">Сгенерировать</button>' +
-        '<button class="btn sm ghost" data-act="qrDownload">Скачать QR</button>' +
-      '</div>';
+      thumb + modeTabs +
+      (mode === 'custom' ? customUI : genUI) +
+      '<div class="sub">Размещение</div>' + posPills(pos) + posFields +
+      '<div class="grid2">' + fRange('Размер', 'qr.size', 40, 300, 2) +
+        fRange('Скругление углов', 'qr.radius', 0, 40, 1) + '</div>' +
+      fText('Подпись', 'qr.caption');
   }
 
   /* ---- build full form ------------------------------------------------- */
@@ -306,21 +354,39 @@
     return input.value;
   }
 
-  /* Generate the QR image from state.qr.data into state.qr.image. */
+  /* Build the styled-render options object from a qr config. */
+  function qrOpts(q) {
+    return {
+      data: q.data, ecl: q.ecl || 'M', scale: 8,
+      moduleShape: q.moduleShape || 'square', eyeShape: q.eyeShape || 'square',
+      dark: q.dark || '#000000', light: q.light || '#ffffff',
+      eyeColor: q.eyeColor || '', margin: q.margin == null ? 4 : q.margin,
+      gradient: q.gradient || 'none', gradientColor: q.gradientColor || q.dark,
+      gradientAngle: q.gradientAngle == null ? 45 : q.gradientAngle,
+      radius: q.radius || 0, logo: q.logo || '', logoScale: q.logoScale || 0.22
+    };
+  }
+  /* Render qr.image for any qr config. Returns a Promise. */
+  function renderQR(q) {
+    if (!q) return Promise.resolve();
+    if (q.mode === 'custom') { q.image = q.custom || ''; return Promise.resolve(); }
+    if (!q.data || !window.QR || !window.QR.render) { q.image = ''; return Promise.resolve(); }
+    return window.QR.render(qrOpts(q)).then(function (url) { q.image = url; }, function () { q.image = ''; });
+  }
+  /* Generate QR for the builder's state, then refresh thumb. Returns Promise. */
   function genQR() {
     var q = state.qr || (state.qr = {});
-    if (!q.data) { q.image = ''; return; }
-    if (!window.QR) { return; }
-    try {
-      q.image = window.QR.toDataURL(q.data, {
-        ecl: q.ecl || 'M', scale: 6, margin: 4,
-        dark: q.dark || '#000000', light: q.light || '#ffffff'
-      });
-    } catch (err) { q.image = ''; flash('QR: ' + err.message); }
+    return renderQR(q).then(refreshQRThumb);
   }
+  function afterQR() { genQR().then(function () { rebuildForm(); renderPreview(); }); }
   function refreshQRThumb() {
     var img = controls.querySelector('.qr-prev img');
     if (img) img.src = state.qr && state.qr.image ? state.qr.image : '';
+  }
+  var QR_DISPLAY_ONLY = { position: 1, size: 1, caption: 1, top: 1, right: 1, x: 1, y: 1, bare: 1, show: 1 };
+  function qrNeedsRegen(path) {
+    if (path.slice(0, 3) !== 'qr.') return false;
+    return !QR_DISPLAY_ONLY[path.slice(3)];
   }
 
   controls.addEventListener('input', function (e) {
@@ -335,8 +401,8 @@
     if (t.type === 'range') {
       var b = t.parentNode.querySelector('b'); if (b) b.textContent = t.value;
     }
-    if (t.dataset.path === 'qr.data' || t.dataset.path === 'qr.dark' || t.dataset.path === 'qr.light') {
-      genQR(); refreshQRThumb();
+    if (qrNeedsRegen(t.dataset.path)) {
+      genQR().then(renderPreview); return;
     }
     renderPreview();
   });
@@ -345,15 +411,16 @@
     var t = e.target;
     if (t.dataset.select && t.dataset.path) {          // <select>
       setPath(state, t.dataset.path, t.value);
-      if (t.dataset.path === 'qr.ecl') { genQR(); refreshQRThumb(); }
-      if (t.dataset.path === 'qr.position') { rebuildForm(); }  // swap pos-fields
+      if (t.dataset.path === 'qr.gradient') { afterQR(); return; }   // show/hide grad fields
+      if (qrNeedsRegen(t.dataset.path)) { genQR().then(renderPreview); return; }
+      if (t.dataset.path === 'qr.position') { rebuildForm(); }
       renderPreview();
       return;
     }
     if (t.type === 'checkbox' && t.dataset.path) {
       setPath(state, t.dataset.path, t.checked);
       if (t.dataset.path === 'qr.show' && t.checked && state.qr && state.qr.data && !state.qr.image) {
-        genQR(); rebuildForm();
+        afterQR(); return;
       }
       renderPreview();
       return;
@@ -362,9 +429,12 @@
       var f = t.files && t.files[0];
       if (!f) return;
       var r = new FileReader();
+      var path = t.dataset.file;
       r.onload = function () {
-        setPath(state, t.dataset.file, r.result);
-        rebuildForm(); renderPreview();
+        setPath(state, path, r.result);
+        if (path === 'qr.custom') { state.qr.mode = 'custom'; }
+        if (path.slice(0, 3) === 'qr.') { afterQR(); }
+        else { rebuildForm(); renderPreview(); }
       };
       r.readAsDataURL(f);
     }
@@ -384,6 +454,7 @@
       state.shipping.options.splice(Number(b.dataset.i), 1);
     } else if (act === 'clear') {
       setPath(state, b.dataset.path, '');
+      if (b.dataset.path.slice(0, 3) === 'qr.') { afterQR(); return; }
     } else if (act === 'up' || act === 'down') {
       var arr = b.dataset.kind === 'row' ? state.summary.rows
         : b.dataset.kind === 'opt' ? state.shipping.options
@@ -392,7 +463,15 @@
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
     } else if (act === 'qrRegen') {
-      genQR();
+      afterQR(); return;
+    } else if (act === 'qrpill') {
+      setPath(state, b.dataset.path, b.dataset.val); afterQR(); return;
+    } else if (act === 'qrPreset') {
+      var p = QR_PRESETS[b.dataset.preset];
+      if (p) { Object.keys(p.set).forEach(function (k) { state.qr[k] = p.set[k]; }); state.qr.mode = 'generated'; }
+      afterQR(); return;
+    } else if (act === 'qrMode') {
+      state.qr.mode = b.dataset.val; afterQR(); return;
     } else if (act === 'qrPos') {
       setPath(state, 'qr.position', b.dataset.pos);
     } else if (act === 'qrDownload') {
@@ -600,16 +679,13 @@
     var ship = shipRow ? parsePriceJS(shipRow.value) : (data.ship_pickup || 0);
     if (s.total) s.total.value = eurJS(data.price + ship + data.protezione);
 
-    // QR: keep the template's QR style/position; only point it at this listing
+    // QR: keep the template's QR style/position. Custom uploaded QR stays as-is;
+    // a generated QR is re-pointed at this listing (image rendered async after).
     if (cfg.qr) {
-      cfg.qr.data = data.url;
-      if (cfg.qr.show && window.QR) {
-        try {
-          cfg.qr.image = window.QR.toDataURL(data.url, {
-            ecl: cfg.qr.ecl || 'M', scale: 6, margin: 4,
-            dark: cfg.qr.dark || '#000000', light: cfg.qr.light || '#ffffff'
-          });
-        } catch (e) {}
+      if (cfg.qr.mode === 'custom') {
+        cfg.qr.image = cfg.qr.custom || cfg.qr.image || '';
+      } else {
+        cfg.qr.data = data.url;
       }
     }
     return cfg;
@@ -639,7 +715,7 @@
   function reapplyParser() {
     if (!lastListingData) { parserRender(); return; }
     parserState = applyListingData(state, lastListingData);
-    renderParserOpts(); parserRender();
+    renderQR(parserState.qr).then(function () { renderParserOpts(); parserRender(); });
   }
 
   function parserLoad() {
@@ -659,8 +735,10 @@
       if (!res.ok) throw new Error(res.error || 'parse error');
       lastListingData = res.data;
       parserState = applyListingData(state, res.data);
-      renderParserOpts(); parserRender();
-      flash('Готово: ' + (res.data.title || ''));
+      return renderQR(parserState.qr).then(function () {
+        renderParserOpts(); parserRender();
+        flash('Готово: ' + (res.data.title || ''));
+      });
     }).catch(function (err) {
       ph.innerHTML = '<span class="big">⚠️</span>' + esc(err.message) +
         '<br><small style="opacity:.7">Нажмите «Собрать» ещё раз.</small>';
@@ -691,8 +769,12 @@
   /* ---- console / automation API --------------------------------------- */
   window.Builder = {
     get: function () { return clone(state); },
-    set: function (cfg) { state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg); rebuildForm(); renderPreview(); },
-    patch: function (path, val) { setPath(state, path, val); rebuildForm(); renderPreview(); },
+    set: function (cfg) { state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg); return genQR().then(function () { rebuildForm(); renderPreview(); }); },
+    patch: function (path, val) {
+      setPath(state, path, val);
+      if (qrNeedsRegen(path)) return genQR().then(function () { rebuildForm(); renderPreview(); });
+      rebuildForm(); renderPreview();
+    },
     exportPNG: exportPNG,
     reset: function () { state = clone(window.DEFAULT_CONFIG); rebuildForm(); renderPreview(); }
   };
@@ -701,6 +783,10 @@
   buildForm();
   renderPreview();
   renderParserOpts();
+  // (re)render the QR with the styled engine if it's on
+  if (state.qr && state.qr.show && (state.qr.data || state.qr.mode === 'custom')) {
+    genQR().then(renderPreview);
+  }
   try {
     var savedTab = localStorage.getItem('active-tab');
     if (savedTab === 'parser') switchTab('parser');

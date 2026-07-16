@@ -115,7 +115,19 @@ window.DEFAULT_CONFIG = {
     "y": 96,
     "bare": false,
     "dark": "#000000",
-    "light": "#ffffff"
+    "light": "#ffffff",
+    "mode": "generated",
+    "custom": "",
+    "moduleShape": "square",
+    "eyeShape": "square",
+    "eyeColor": "",
+    "gradient": "none",
+    "gradientColor": "#6a5cff",
+    "gradientAngle": 45,
+    "margin": 4,
+    "radius": 0,
+    "logo": "",
+    "logoScale": 0.22
   },
   "layout": {
     "order": [

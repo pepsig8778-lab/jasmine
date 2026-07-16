@@ -296,5 +296,107 @@
     return c.toDataURL('image/png');
   }
 
-  root.QR = { matrix: matrix, toDataURL: toDataURL };
+  /* ----------------------------------------------------------------------- */
+  /* Styled renderer: module shapes, eye styles, gradients, center logo.      */
+  /* render(opts) -> Promise<dataURL>                                          */
+  /* ----------------------------------------------------------------------- */
+  function roundRectPath(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawModule(ctx, x, y, s, shape) {
+    if (shape === 'dots') { ctx.beginPath(); ctx.arc(x + s / 2, y + s / 2, s * 0.46, 0, 7); ctx.fill(); }
+    else if (shape === 'rounded') { roundRectPath(ctx, x, y, s, s, s * 0.35); ctx.fill(); }
+    else if (shape === 'diamond') {
+      ctx.beginPath(); ctx.moveTo(x + s / 2, y); ctx.lineTo(x + s, y + s / 2);
+      ctx.lineTo(x + s / 2, y + s); ctx.lineTo(x, y + s / 2); ctx.closePath(); ctx.fill();
+    } else ctx.fillRect(x, y, s, s);
+  }
+  function drawShape(ctx, x, y, w, shape) {
+    if (shape === 'circle') { ctx.beginPath(); ctx.arc(x + w / 2, y + w / 2, w / 2, 0, 7); ctx.fill(); }
+    else if (shape === 'rounded') { roundRectPath(ctx, x, y, w, w, w * 0.28); ctx.fill(); }
+    else ctx.fillRect(x, y, w, w);
+  }
+  function drawEye(ctx, x, y, s, shape, fill, bg) {
+    ctx.fillStyle = fill; drawShape(ctx, x, y, 7 * s, shape);
+    ctx.fillStyle = bg || '#ffffff'; drawShape(ctx, x + s, y + s, 5 * s, shape);
+    ctx.fillStyle = fill; drawShape(ctx, x + 2 * s, y + 2 * s, 3 * s, shape === 'square' ? 'square' : (shape === 'circle' ? 'circle' : 'rounded'));
+  }
+
+  function render(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var hasLogo = !!opts.logo;
+      var ecl = hasLogo ? 'H' : (opts.ecl || 'M');
+      var m = matrix(opts.data || ' ', { ecl: ecl });
+      var n = m.length;
+      var margin = opts.margin == null ? 4 : Math.max(0, opts.margin);
+      var scale = opts.scale || 10;
+      var dim = (n + margin * 2) * scale;
+      var c = document.createElement('canvas'); c.width = c.height = dim;
+      var ctx = c.getContext('2d');
+      var light = opts.light || '#ffffff';
+      var radius = opts.radius || 0;
+
+      if (light !== 'transparent') {
+        ctx.fillStyle = light;
+        if (radius) { roundRectPath(ctx, 0, 0, dim, dim, radius); ctx.fill(); }
+        else ctx.fillRect(0, 0, dim, dim);
+      }
+
+      // module fill: solid or gradient
+      var fill;
+      var dark = opts.dark || '#000000';
+      if (opts.gradient === 'linear') {
+        var a = (opts.gradientAngle == null ? 45 : opts.gradientAngle) * Math.PI / 180;
+        var g = ctx.createLinearGradient(dim / 2 - Math.cos(a) * dim / 2, dim / 2 - Math.sin(a) * dim / 2,
+          dim / 2 + Math.cos(a) * dim / 2, dim / 2 + Math.sin(a) * dim / 2);
+        g.addColorStop(0, dark); g.addColorStop(1, opts.gradientColor || dark); fill = g;
+      } else if (opts.gradient === 'radial') {
+        var gr = ctx.createRadialGradient(dim / 2, dim / 2, dim * 0.08, dim / 2, dim / 2, dim / 2);
+        gr.addColorStop(0, dark); gr.addColorStop(1, opts.gradientColor || dark); fill = gr;
+      } else fill = dark;
+
+      var finders = [[0, 0], [0, n - 7], [n - 7, 0]];
+      function inFinder(r, cc) {
+        for (var k = 0; k < 3; k++) {
+          var fr = finders[k][0], fc = finders[k][1];
+          if (r >= fr && r < fr + 7 && cc >= fc && cc < fc + 7) return true;
+        }
+        return false;
+      }
+      ctx.fillStyle = fill;
+      for (var r = 0; r < n; r++) for (var cc = 0; cc < n; cc++) {
+        if (m[r][cc] && !inFinder(r, cc))
+          drawModule(ctx, (cc + margin) * scale, (r + margin) * scale, scale, opts.moduleShape || 'square');
+      }
+      var eyeFill = opts.eyeColor || fill;
+      for (var f = 0; f < 3; f++)
+        drawEye(ctx, (finders[f][1] + margin) * scale, (finders[f][0] + margin) * scale, scale,
+          opts.eyeShape || 'square', eyeFill, light === 'transparent' ? '#ffffff' : light);
+
+      function finish() { resolve(c.toDataURL('image/png')); }
+      if (hasLogo) {
+        var img = new Image();
+        img.onload = function () {
+          var ls = Math.min(0.33, Math.max(0.1, opts.logoScale || 0.22));
+          var lw = dim * ls, lx = (dim - lw) / 2, pad = lw * 0.14;
+          ctx.fillStyle = opts.logoBg || light === 'transparent' ? '#ffffff' : light;
+          roundRectPath(ctx, lx - pad, lx - pad, lw + 2 * pad, lw + 2 * pad, lw * 0.18); ctx.fill();
+          try { ctx.drawImage(img, lx, lx, lw, lw); } catch (e) {}
+          finish();
+        };
+        img.onerror = finish;
+        img.src = opts.logo;
+      } else finish();
+    });
+  }
+
+  root.QR = { matrix: matrix, toDataURL: toDataURL, render: render };
 })(typeof window !== 'undefined' ? window : this);
