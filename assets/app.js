@@ -156,21 +156,29 @@
       fFile('Логотип перевозчика (пусто = Poste)', 'shipping.options.' + i + '.carrierLogo', { clear: true }) +
       '</div>';
   }
-  var SECTION_LABELS = { summary: 'Сводка заказа', discount: 'Промокод', shipping: 'Доставка' };
+  var SECTION_LABELS = { header: 'Шапка', summary: 'Сводка заказа', discount: 'Промокод', shipping: 'Доставка' };
+  function sectionRow(k, i, n) {
+    var free = (state.layout && state.layout.free) || {};
+    var isFree = !!free[k];
+    var showPath = k + '.show';
+    var shown = getPath(state, showPath) !== false;
+    var move = k === 'header' ? '' :
+      '<button class="btn xs ghost" data-act="up" data-kind="sec" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+      '<button class="btn xs ghost" data-act="down" data-kind="sec" data-i="' + i + '"' + (i === n - 1 ? ' disabled' : '') + '>↓</button>';
+    return '<div class="item ord"><span class="ord-name">' + esc(SECTION_LABELS[k] || k) +
+      (isFree ? ' <span class="tag-free">своб.</span>' : '') + '</span>' +
+      '<span class="item-actions">' +
+      '<label class="chk mini"><input type="checkbox" data-path="' + showPath + '"' + (shown ? ' checked' : '') + '><span>вид.</span></label>' +
+      '<button class="btn xs ghost' + (isFree ? ' on' : '') + '" data-act="toggleFree" data-key="' + k + '" title="Свободное перетаскивание">✥</button>' +
+      move + '</span></div>';
+  }
   function layoutEditor() {
     var order = (state.layout && state.layout.order) || ['summary', 'discount', 'shipping'];
-    var items = order.map(function (k, i) {
-      var showPath = k + '.show';
-      var shown = getPath(state, showPath) !== false;
-      return '<div class="item ord"><span class="ord-name">' + esc(SECTION_LABELS[k] || k) + '</span>' +
-        '<span class="item-actions">' +
-        '<label class="chk mini"><input type="checkbox" data-path="' + showPath + '"' + (shown ? ' checked' : '') + '><span>вид.</span></label>' +
-        '<button class="btn xs ghost" data-act="up" data-kind="sec" data-i="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
-        '<button class="btn xs ghost" data-act="down" data-kind="sec" data-i="' + i + '"' + (i === order.length - 1 ? ' disabled' : '') + '>↓</button>' +
-        '</span></div>';
-    }).join('');
-    return '<div class="hint">Порядок и видимость разделов на скрине:</div>' + items +
-      '<div class="chk-row" style="margin-top:8px">' + fCheck('Показывать шапку', 'header.show') + '</div>';
+    var rows = sectionRow('header', 0, 1) + order.map(function (k, i) { return sectionRow(k, i, order.length); }).join('');
+    return '<div class="hint">✥ — сделать раздел «свободным»: тогда его можно ' +
+      '<b>таскать мышью в любое место</b> прямо на превью. ↑↓ — порядок в потоке, «вид.» — показать/скрыть.</div>' +
+      rows +
+      '<button class="btn sm ghost" data-act="resetLayout" style="width:100%;margin-top:10px">Сбросить раскладку</button>';
   }
 
   var QR_POS = [['block', 'Блок'], ['corner', 'Угол'], ['free', 'Свободно'], ['product', 'В товаре']];
@@ -462,6 +470,22 @@
       var i = Number(b.dataset.i), j = act === 'up' ? i - 1 : i + 1;
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    } else if (act === 'toggleFree') {
+      var key = b.dataset.key;
+      state.layout = state.layout || { order: ['summary', 'discount', 'shipping'] };
+      state.layout.free = state.layout.free || {};
+      if (state.layout.free[key]) { delete state.layout.free[key]; }
+      else {
+        var elb = preview.querySelector('[data-block="' + key + '"]'), fp = { x: 20, y: 90, w: null };
+        if (elb) {
+          var pr = preview.getBoundingClientRect(), rr = elb.getBoundingClientRect();
+          fp = { x: Math.round((rr.left - pr.left) / zoom), y: Math.round((rr.top - pr.top) / zoom), w: Math.round(elb.offsetWidth) };
+        }
+        state.layout.free[key] = fp;
+      }
+    } else if (act === 'resetLayout') {
+      state.layout = { order: ['summary', 'discount', 'shipping'], free: {} };
+      flash('Раскладка сброшена');
     } else if (act === 'qrRegen') {
       afterQR(); return;
     } else if (act === 'qrpill') {
@@ -616,6 +640,58 @@
   setupDrag(preview, function () { return state; }, function () { return zoom; },
     function () { renderPreview(); rebuildForm(); });
   setupDrag(document.getElementById('parserPreview'), function () { return parserState; },
+    function () { return parserZoom; }, function () { parserRender(); });
+
+  /* ---- drag ANY section/block to a free (arbitrary) position ----------- */
+  function setupBlockDrag(host, getCfg, getZoom, onEnd) {
+    var drag = null;
+    host.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('[data-qr-drag]')) return;        // QR has its own drag
+      var el = e.target.closest('[data-block]');
+      if (!el || !host.contains(el)) return;
+      e.preventDefault();
+      var z = getZoom();
+      var hostRect = host.getBoundingClientRect();
+      var elRect = el.getBoundingClientRect();
+      var w = el.offsetWidth;
+      drag = {
+        el: el, key: el.dataset.block, hostRect: hostRect, w: w,
+        grabX: (e.clientX - elRect.left) / z, grabY: (e.clientY - elRect.top) / z
+      };
+      // lift into absolute at its current visual spot (no jump)
+      el.style.position = 'absolute';
+      el.style.left = ((elRect.left - hostRect.left) / z) + 'px';
+      el.style.top = ((elRect.top - hostRect.top) / z) + 'px';
+      el.style.width = w + 'px'; el.style.margin = '0'; el.style.zIndex = '60';
+      el.classList.add('dragging');
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    host.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var z = getZoom(), cfg = getCfg(), cw = (cfg.canvas && cfg.canvas.width) || 418,
+          ch = (cfg.canvas && cfg.canvas.height) || 826;
+      var x = Math.max(-8, Math.min(cw - 30, (e.clientX - drag.hostRect.left) / z - drag.grabX));
+      var y = Math.max(0, Math.min(ch - 24, (e.clientY - drag.hostRect.top) / z - drag.grabY));
+      drag.el.style.left = Math.round(x) + 'px';
+      drag.el.style.top = Math.round(y) + 'px';
+      drag._x = Math.round(x); drag._y = Math.round(y);
+    });
+    function end() {
+      if (!drag) return;
+      if (drag._x != null) {
+        var cfg = getCfg();
+        cfg.layout = cfg.layout || { order: ['summary', 'discount', 'shipping'] };
+        cfg.layout.free = cfg.layout.free || {};
+        cfg.layout.free[drag.key] = { x: drag._x, y: drag._y, w: drag.w };
+      }
+      drag = null; onEnd();
+    }
+    host.addEventListener('pointerup', end);
+    host.addEventListener('pointercancel', end);
+  }
+  setupBlockDrag(preview, function () { return state; }, function () { return zoom; },
+    function () { renderPreview(); rebuildForm(); });
+  setupBlockDrag(document.getElementById('parserPreview'), function () { return parserState; },
     function () { return parserZoom; }, function () { parserRender(); });
 
   /* ===================================================================== */

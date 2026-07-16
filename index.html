@@ -145,7 +145,17 @@
   .item-actions{display:flex;align-items:center;gap:4px;}
   .reorder{display:inline-flex;gap:2px;}
   .item.ord{display:flex;align-items:center;justify-content:space-between;padding:8px 11px;}
-  .ord-name{font-size:12.5px;}
+  .ord-name{font-size:12.5px;display:flex;align-items:center;gap:6px;}
+  .tag-free{font-size:9px;color:var(--accent-2);border:1px solid var(--accent-2);
+    border-radius:4px;padding:0 4px;line-height:1.5;}
+  .btn.xs.on{color:var(--accent-2);border-color:var(--accent-2);background:rgba(79,124,255,.12);}
+  /* drag affordance — only in the live editor previews, never in exports */
+  #preview [data-block]:hover,#parserPreview [data-block]:hover{
+    outline:1.5px dashed rgba(79,124,255,.65);outline-offset:-1px;cursor:move;border-radius:4px;}
+  #preview [data-block].free,#parserPreview [data-block].free{cursor:move;}
+  #preview [data-block].dragging,#parserPreview [data-block].dragging{
+    opacity:.92;box-shadow:0 10px 30px rgba(0,0,0,.4);outline:1.5px solid var(--accent-2);}
+  #preview [data-qr-drag]:hover,#parserPreview [data-qr-drag]:hover{outline:1.5px dashed rgba(79,124,255,.65);cursor:move;}
   .chk.mini{font-size:11px;gap:5px;margin:0;color:var(--ink-dim);}
   .chk.mini input{width:13px;height:13px;}
   .btn[disabled]{opacity:.3;cursor:default;pointer-events:none;}

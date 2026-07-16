@@ -331,28 +331,54 @@
   /* ----------------------------------------------------------------------- */
   /* Public: build HTML string for the screen inner content                   */
   /* ----------------------------------------------------------------------- */
-  function renderScreenHTML(cfg) {
+  function headerHTML(cfg) {
     var h = cfg.header || {};
-    var header = (h.show === false) ? '' : ('<div class="sc-header">' +
+    if (h.show === false) return '';
+    return '<div class="sc-header">' +
       (h.showClose === false ? '' : '<span class="sc-close">' + ICONS.close + '</span>') +
       '<span class="sc-title">' + esc(h.title) + '</span>' +
-      '</div><div class="sc-header-line"></div>');
+      '</div><div class="sc-header-line"></div>';
+  }
 
+  function renderScreenHTML(cfg) {
     var q = qrOn(cfg);
-    var parts = {
-      summary: function () { return (cfg.summary && cfg.summary.show === false) ? '' : buildSummary(cfg.summary || {}, q); },
-      discount: function () { return (cfg.discount && cfg.discount.show === false) ? '' : buildDiscount(cfg.discount); },
-      shipping: function () { return (cfg.shipping && cfg.shipping.show === false) ? '' : buildShipping(cfg.shipping, cfg.theme); }
+    var free = (cfg.layout && cfg.layout.free) || {};
+
+    // inner HTML for each draggable block
+    var blocks = {
+      header: headerHTML(cfg),
+      summary: (cfg.summary && cfg.summary.show === false) ? '' : buildSummary(cfg.summary || {}, q),
+      discount: (cfg.discount && cfg.discount.show === false) ? '' : buildDiscount(cfg.discount),
+      shipping: (cfg.shipping && cfg.shipping.show === false) ? '' : buildShipping(cfg.shipping, cfg.theme)
     };
+    function wrap(key, extraClass) {
+      return blocks[key]
+        ? '<div class="sc-block' + (extraClass || '') + '" data-block="' + key + '">' + blocks[key] + '</div>' : '';
+    }
+
+    // header in flow (unless free)
+    var flowHeader = (!free.header) ? wrap('header', ' hdr') : '';
+
+    // body: ordered content sections that are NOT free-positioned
     var order = (cfg.layout && cfg.layout.order) || ['summary', 'discount', 'shipping'];
-    var bodyInner = order.map(function (k) { return parts[k] ? parts[k]() : ''; }).join('');
+    var bodyInner = order.filter(function (k) { return !free[k]; }).map(function (k) { return wrap(k); }).join('');
     if (q && (q.position == null || q.position === 'block')) bodyInner += buildQRBlock(q);
     var body = '<div class="sc-body">' + bodyInner + '</div>';
+
+    // free-positioned blocks (absolute overlays, draggable)
+    var freeHtml = Object.keys(free).map(function (k) {
+      if (!blocks[k]) return '';
+      var fb = free[k] || {};
+      var w = fb.w ? ('width:' + fb.w + 'px;') : '';
+      return '<div class="sc-block free' + (k === 'header' ? ' hdr' : '') + '" data-block="' + k +
+        '" style="position:absolute;left:' + (fb.x || 0) + 'px;top:' + (fb.y || 0) + 'px;' + w +
+        'z-index:20">' + blocks[k] + '</div>';
+    }).join('');
 
     var overlay = '';
     if (q && q.position === 'corner') overlay = buildQRCorner(q);
     else if (q && q.position === 'free') overlay = buildQRFree(q);
-    return header + body + buildScrollbar(cfg.canvas || {}) + overlay;
+    return flowHeader + body + buildScrollbar(cfg.canvas || {}) + freeHtml + overlay;
   }
 
   /* Apply config to an existing .screen element. Sets style cleanly each call

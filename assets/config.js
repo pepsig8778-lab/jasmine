@@ -134,6 +134,7 @@ window.DEFAULT_CONFIG = {
       "summary",
       "discount",
       "shipping"
-    ]
+    ],
+    "free": {}
   }
 };
