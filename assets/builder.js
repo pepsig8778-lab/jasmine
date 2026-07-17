@@ -135,7 +135,18 @@
 '.sc-qr-free.bare{background:transparent;border:0;box-shadow:none;padding:0;}',
 '.sc-qr-corner .sc-qr-cap,.sc-qr-free .sc-qr-cap{font-size:9px;text-align:center;max-width:120px;line-height:1.15;}',
 '.sc-qr-inprod{margin-left:auto;flex:0 0 auto;padding-left:10px;}',
-'.sc-qr-free[data-qr-drag]{cursor:move;}'
+'.sc-qr-free[data-qr-drag]{cursor:move;}',
+
+/* ---- custom (user-added) elements ---- */
+'.sc-custom{position:absolute;box-sizing:border-box;}',
+'.sc-c-text{white-space:pre-wrap;word-break:break-word;}',
+'.sc-c-btn{display:flex;align-items:center;justify-content:center;font-weight:700;}',
+'.sc-c-badge{display:inline-block;font-weight:700;text-transform:uppercase;',
+'  letter-spacing:.6px;}',
+'.sc-c-info{display:flex;gap:8px;}',
+'.sc-c-info .ico{flex:0 0 auto;margin-top:1px;}',
+'.sc-c-info .ico svg{width:16px;height:16px;display:block;}',
+'.sc-c-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}'
   ].join('\n');
 
   /* ----------------------------------------------------------------------- */
@@ -337,6 +348,74 @@
   /* ----------------------------------------------------------------------- */
   /* Public: build HTML string for the screen inner content                   */
   /* ----------------------------------------------------------------------- */
+  /* ---- custom user elements -------------------------------------------- */
+  var CUSTOM_DEFAULTS = {
+    text:  { w: 200, text: 'Текст', size: 14, weight: 400, color: '', align: 'left', bg: '', pad: 0, radius: 0 },
+    box:   { w: 200, h: 90, bg: '', border: '', radius: 12, shadow: true },
+    image: { w: 120, h: 120, src: '', radius: 8, fit: 'cover' },
+    line:  { w: 220, h: 1, color: '' },
+    btn:   { w: 220, h: 34, text: 'Кнопка', color: '', bg: '', border: '', radius: 20, size: 14 },
+    badge: { text: 'NUOVO', color: '', bg: '', radius: 4, size: 10 },
+    info:  { w: 300, text: 'Пояснение к заказу', bg: '', color: '', radius: 9, size: 12 },
+    row:   { w: 300, label: 'Название', value: '0,00 €', size: 14, color: '', vcolor: '', weight: 400 }
+  };
+  function withDefaults(c) {
+    var d = CUSTOM_DEFAULTS[c.type] || {};
+    var o = {}; Object.keys(d).forEach(function (k) { o[k] = c[k] == null ? d[k] : c[k]; });
+    o.type = c.type; o.id = c.id; o.x = c.x || 0; o.y = c.y || 0; o.z = c.z || 30;
+    if (c.w != null) o.w = c.w; if (c.h != null) o.h = c.h;
+    return o;
+  }
+  function buildCustom(cfg) {
+    var list = cfg.custom || [];
+    return list.map(function (raw) {
+      var c = withDefaults(raw);
+      var box = 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z + ';' +
+        (c.w != null ? 'width:' + c.w + 'px;' : '') + (c.h != null && c.type !== 'text' ? 'height:' + c.h + 'px;' : '');
+      var A = ' class="sc-custom sc-c-' + c.type + '" data-custom="' + esc(c.id) + '" style="';
+
+      if (c.type === 'image') {
+        return '<img' + A + box + 'object-fit:' + c.fit + ';border-radius:' + c.radius + 'px;" src="' +
+          esc(c.src) + '" alt="">';
+      }
+      if (c.type === 'line') {
+        return '<div' + A + box + 'height:' + c.h + 'px;background:' + (c.color || 'var(--divider)') + ';"></div>';
+      }
+      if (c.type === 'box') {
+        return '<div' + A + box + 'background:' + (c.bg || 'var(--card)') + ';border:1px solid ' +
+          (c.border || 'var(--border)') + ';border-radius:' + c.radius + 'px;' +
+          (c.shadow ? 'box-shadow:0 1px 2px rgba(24,39,75,.05);' : '') + '"></div>';
+      }
+      if (c.type === 'btn') {
+        return '<div' + A + box + 'background:' + (c.bg || 'var(--btn-bg,var(--card))') + ';color:' +
+          (c.color || 'var(--red)') + ';border:1px solid ' + (c.border || 'var(--btn-border)') +
+          ';border-radius:' + c.radius + 'px;font-size:' + c.size + 'px;">' + esc(c.text) + '</div>';
+      }
+      if (c.type === 'badge') {
+        return '<div' + A + 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z +
+          ';background:' + (c.bg || 'var(--badge-bg)') + ';color:' + (c.color || 'var(--badge-text)') +
+          ';border-radius:' + c.radius + 'px;font-size:' + c.size + 'px;padding:3px 7px;">' +
+          esc(c.text) + '</div>';
+      }
+      if (c.type === 'info') {
+        return '<div' + A + box + 'background:' + (c.bg || 'var(--info-bg)') + ';color:' +
+          (c.color || 'var(--info-text)') + ';border-radius:' + c.radius + 'px;padding:10px 12px;font-size:' +
+          c.size + 'px;line-height:1.42;"><span class="ico">' + ICONS.info + '</span><span>' +
+          esc(c.text) + '</span></div>';
+      }
+      if (c.type === 'row') {
+        return '<div' + A + box + 'font-size:' + c.size + 'px;"><span style="color:' +
+          (c.color || 'var(--text)') + '">' + esc(c.label) + '</span><span style="color:' +
+          (c.vcolor || 'var(--text)') + ';font-weight:' + c.weight + '">' + esc(c.value) + '</span></div>';
+      }
+      // text
+      return '<div' + A + box + 'font-size:' + c.size + 'px;font-weight:' + c.weight + ';color:' +
+        (c.color || 'var(--text)') + ';text-align:' + c.align + ';line-height:1.3;' +
+        (c.bg ? 'background:' + c.bg + ';' : '') + (c.pad ? 'padding:' + c.pad + 'px;' : '') +
+        (c.radius ? 'border-radius:' + c.radius + 'px;' : '') + '">' + esc(c.text) + '</div>';
+    }).join('');
+  }
+
   function headerHTML(cfg) {
     var h = cfg.header || {};
     if (h.show === false) return '';
@@ -384,7 +463,8 @@
     var overlay = '';
     if (q && q.position === 'corner') overlay = buildQRCorner(q);
     else if (q && q.position === 'free') overlay = buildQRFree(q);
-    return flowHeader + body + buildScrollbar(cfg.canvas || {}) + freeHtml + overlay;
+    return flowHeader + body + buildScrollbar(cfg.canvas || {}) + freeHtml +
+      buildCustom(cfg) + overlay;
   }
 
   /* Apply config to an existing .screen element. Sets style cleanly each call
@@ -405,6 +485,7 @@
     return renderScreen(el, cfg);
   }
 
+  root.CUSTOM_DEFAULTS = CUSTOM_DEFAULTS;
   root.SCREEN_CSS = SCREEN_CSS;
   root.renderScreenHTML = renderScreenHTML;
   root.renderScreen = renderScreen;

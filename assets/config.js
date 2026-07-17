@@ -146,5 +146,6 @@ window.DEFAULT_CONFIG = {
       "shipping"
     ],
     "free": {}
-  }
+  },
+  "custom": []
 };

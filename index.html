@@ -190,6 +190,29 @@
   .toolbar .spacer{flex:1;}
   .toolbar .lbl{font-size:11px;color:var(--ink-dim);margin-right:2px;}
   .toolbar .warn{font-size:11px;color:#ffcf70;}
+  /* ---------------- add-element menu ---------------- */
+  .add-wrap{position:relative;}
+  .add-menu{position:absolute;top:calc(100% + 8px);left:0;width:330px;background:var(--panel);
+    border:1px solid var(--line);border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.55);
+    padding:8px;display:none;z-index:210;}
+  .add-menu.open{display:block;}
+  .add-menu .hh{font-size:10.5px;color:var(--ink-dim);padding:4px 6px 8px;letter-spacing:.4px;}
+  .add-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .add-it{display:flex;align-items:center;gap:8px;background:var(--panel-2);color:var(--ink);
+    border:1px solid var(--field-line);border-radius:8px;padding:9px 10px;font-size:12.5px;
+    cursor:pointer;font-family:inherit;text-align:left;}
+  .add-it:hover{border-color:var(--accent-2);background:rgba(79,124,255,.12);}
+  .add-it b{font-size:15px;font-weight:400;}
+  /* placement mode */
+  .placing #preview{cursor:crosshair;}
+  .placing #preview *{pointer-events:none;}
+  .place-hint{position:fixed;left:50%;top:76px;transform:translateX(-50%);z-index:300;
+    background:var(--accent);color:#fff;font-size:12.5px;font-weight:600;padding:8px 14px;
+    border-radius:9px;box-shadow:0 8px 24px rgba(249,66,58,.4);display:none;}
+  .placing .place-hint{display:block;}
+  /* selected custom element */
+  #preview [data-custom]:hover{outline:1.5px dashed rgba(79,124,255,.7);outline-offset:1px;cursor:move;}
+  #preview [data-custom].sel{outline:2px solid var(--accent-2);outline-offset:1px;}
   /* ---------------- history journal ---------------- */
   .hist-wrap{position:relative;}
   .hist-menu{position:absolute;top:calc(100% + 8px);left:0;width:300px;max-height:360px;
@@ -253,6 +276,23 @@
 
       <main class="stage">
         <div class="toolbar">
+          <div class="grp add-wrap">
+            <button class="btn sm primary" id="addBtn">＋ Добавить на шаблон</button>
+            <div class="add-menu" id="addMenu">
+              <div class="hh">Выберите элемент, затем кликните по шаблону</div>
+              <div class="add-grid">
+                <button class="add-it" data-add="text"><b>📝</b>Текст</button>
+                <button class="add-it" data-add="box"><b>▭</b>Блок / карточка</button>
+                <button class="add-it" data-add="image"><b>🖼</b>Картинка</button>
+                <button class="add-it" data-add="row"><b>⇄</b>Строка «цена»</button>
+                <button class="add-it" data-add="btn"><b>🔘</b>Кнопка</button>
+                <button class="add-it" data-add="badge"><b>🏷</b>Бейдж</button>
+                <button class="add-it" data-add="info"><b>💬</b>Инфо-блок</button>
+                <button class="add-it" data-add="line"><b>➖</b>Линия</button>
+              </div>
+            </div>
+          </div>
+          <div class="sep"></div>
           <div class="grp">
             <span class="lbl">Масштаб</span>
             <button class="btn sm" id="zoomOut">−</button>
@@ -345,6 +385,7 @@
     </section>
   </div>
 
+  <div class="place-hint" id="placeHint"></div>
   <div class="flash" id="flash"></div>
 
   <script src="assets/config.js"></script>

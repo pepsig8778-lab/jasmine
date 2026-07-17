@@ -148,6 +148,10 @@
     preview.style.transform = 'scale(' + zoom + ')';
     canvasWrap.style.width = (state.canvas.width * zoom) + 'px';
     canvasWrap.style.height = (state.canvas.height * zoom) + 'px';
+    if (selId) {
+      var se = preview.querySelector('[data-custom="' + selId + '"]');
+      if (se) se.classList.add('sel');
+    }
     updateFitWarn();
     persist();
   }
@@ -359,6 +363,59 @@
       fText('Подпись', 'qr.caption');
   }
 
+  /* ---- editor for user-added elements ---------------------------------- */
+  function customFields(c, p) {
+    var ALIGN = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
+    switch (c.type) {
+      case 'text': return fText('Текст', p + 'text', { area: true, rows: 2 }) +
+        '<div class="grid2">' + fRange('Размер', p + 'size', 8, 48, 1) + fRange('Жирность', p + 'weight', 300, 900, 100) + '</div>' +
+        '<div class="grid2">' + fColor('Цвет', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
+        '<div class="grid2">' + fSelect('Выравнивание', p + 'align', ALIGN) + fNum('Ширина', p + 'w', 20, 900, 1) + '</div>' +
+        '<div class="grid2">' + fNum('Отступ', p + 'pad', 0, 40, 1) + fNum('Скругление', p + 'radius', 0, 30, 1) + '</div>';
+      case 'box': return '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
+        '<div class="grid2">' + fColor('Фон', p + 'bg') + fColor('Рамка', p + 'border') + '</div>' +
+        fNum('Скругление', p + 'radius', 0, 40, 1) + fCheck('Тень', p + 'shadow');
+      case 'image': return fFile('Картинка', p + 'src') +
+        '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
+        '<div class="grid2">' + fNum('Скругление', p + 'radius', 0, 200, 1) +
+          fSelect('Вписывание', p + 'fit', [{ v: 'cover', l: 'Заполнить' }, { v: 'contain', l: 'Вместить' }]) + '</div>';
+      case 'line': return '<div class="grid2">' + fNum('Длина', p + 'w', 10, 900, 1) + fNum('Толщина', p + 'h', 1, 12, 1) + '</div>' +
+        fColor('Цвет', p + 'color');
+      case 'btn': return fText('Текст', p + 'text') +
+        '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fNum('Высота', p + 'h', 20, 80, 1) + '</div>' +
+        '<div class="grid2">' + fColor('Текст', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
+        '<div class="grid2">' + fColor('Рамка', p + 'border') + fNum('Скругление', p + 'radius', 0, 40, 1) + '</div>';
+      case 'badge': return fText('Текст', p + 'text') +
+        '<div class="grid2">' + fColor('Текст', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
+        '<div class="grid2">' + fRange('Размер', p + 'size', 7, 20, 1) + fNum('Скругление', p + 'radius', 0, 20, 1) + '</div>';
+      case 'info': return fText('Текст', p + 'text', { area: true, rows: 2 }) +
+        '<div class="grid2">' + fColor('Фон', p + 'bg') + fColor('Текст', p + 'color') + '</div>' +
+        '<div class="grid2">' + fNum('Ширина', p + 'w', 60, 900, 1) + fRange('Размер', p + 'size', 8, 20, 1) + '</div>';
+      case 'row': return '<div class="grid2">' + fText('Слева', p + 'label') + fText('Справа', p + 'value') + '</div>' +
+        '<div class="grid2">' + fColor('Цвет слева', p + 'color') + fColor('Цвет справа', p + 'vcolor') + '</div>' +
+        '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fRange('Размер', p + 'size', 8, 30, 1) + '</div>';
+    }
+    return '';
+  }
+  function customEditor() {
+    var list = state.custom || [];
+    var hint = '<div class="hint">Нажмите <b>«＋ Добавить на шаблон»</b> вверху, выберите элемент ' +
+      'и кликните по превью. Потом тяните его мышью, а тут — настройки. ' +
+      '<br>Del — удалить выделенный.</div>';
+    if (!list.length) return hint;
+    return hint + list.map(function (c, i) {
+      var p = 'custom.' + i + '.';
+      return '<div class="item" data-cid="' + esc(c.id) + '">' +
+        '<div class="item-h"><b>' + esc(ADD_LABELS[c.type] || c.type) + '</b><span class="item-actions">' +
+        '<button class="btn xs ghost" data-act="selCustom" data-id="' + esc(c.id) + '" title="Показать на шаблоне">◎</button>' +
+        '<button class="btn xs ghost" data-act="dupCustom" data-i="' + i + '" title="Дублировать">⧉</button>' +
+        '<button class="btn xs ghost" data-act="delCustom" data-i="' + i + '" title="Удалить">✕</button>' +
+        '</span></div>' +
+        '<div class="grid2">' + fNum('X', p + 'x', -200, 1200, 1) + fNum('Y', p + 'y', -200, 2000, 1) + '</div>' +
+        customFields(c, p) + '</div>';
+    }).join('');
+  }
+
   /* ---- build full form ------------------------------------------------- */
   function buildForm() {
     var rn = state.summary.rows.length;
@@ -434,6 +491,8 @@
       '<div class="theme-grid">' + theme + '</div>';
 
     controls.innerHTML =
+      '<details class="sec" data-sec="custom"><summary>➕ Свои элементы (' +
+        ((state.custom || []).length) + ')</summary><div class="sec-body">' + customEditor() + '</div></details>' +
       section('Разделы (порядок / вид)', layoutEditor(), false) +
       section('Рамка и прокрутка', frame, false) +
       section('Шапка', header, false) +
@@ -554,7 +613,7 @@
 
   var ACT_LABELS = {
     addRow: 'Добавлена строка', delRow: 'Удалена строка',
-    addOpt: 'Добавлена опция', delOpt: 'Удалена опция',
+    addOpt: 'Добавлена опция', delOpt: 'Удалена опция', delCustom: 'Удалён элемент', dupCustom: 'Дублирован элемент',
     clear: 'Очищено поле', up: 'Порядок ↑', down: 'Порядок ↓',
     toggleFree: 'Свободное размещение', resetLayout: 'Сброс раскладки',
     qrRegen: 'QR обновлён', qrpill: 'Стиль QR', qrPreset: 'Пресет QR',
@@ -585,6 +644,14 @@
       var i = Number(b.dataset.i), j = act === 'up' ? i - 1 : i + 1;
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    } else if (act === 'selCustom') {
+      selectCustom(b.dataset.id); return;
+    } else if (act === 'delCustom') {
+      state.custom.splice(Number(b.dataset.i), 1); selId = null;
+    } else if (act === 'dupCustom') {
+      var src = state.custom[Number(b.dataset.i)];
+      var cp = JSON.parse(JSON.stringify(src)); cp.id = uid(); cp.x += 12; cp.y += 12;
+      state.custom.push(cp); selId = cp.id;
     } else if (act === 'toggleFree') {
       var key = b.dataset.key;
       state.layout = state.layout || { order: ['summary', 'discount', 'shipping'] };
@@ -807,7 +874,7 @@
     var drag = null;
     host.addEventListener('pointerdown', function (e) {
       if (e.target.closest('[data-qr-drag]')) return;        // QR has its own drag
-      var el = e.target.closest('[data-block]');
+      var el = e.target.closest('[data-block],[data-custom]');
       if (!el || !host.contains(el)) return;
       e.preventDefault();
       var z = getZoom();
@@ -815,7 +882,7 @@
       var elRect = el.getBoundingClientRect();
       var w = el.offsetWidth;
       drag = {
-        el: el, key: el.dataset.block, hostRect: hostRect, w: w,
+        el: el, key: el.dataset.block, cid: el.dataset.custom || null, hostRect: hostRect, w: w,
         grabX: (e.clientX - elRect.left) / z, grabY: (e.clientY - elRect.top) / z
       };
       // lift into absolute at its current visual spot (no jump)
@@ -839,11 +906,16 @@
     function end() {
       if (!drag) return;
       if (drag._x != null) {
-        markChange('Перемещён блок: ' + (SECTION_LABELS[drag.key] || drag.key));
         var cfg = getCfg();
-        cfg.layout = cfg.layout || { order: ['summary', 'discount', 'shipping'] };
-        cfg.layout.free = cfg.layout.free || {};
-        cfg.layout.free[drag.key] = { x: drag._x, y: drag._y, w: drag.w };
+        if (drag.cid) {                       // user-added element
+          var it = (cfg.custom || []).filter(function (c) { return c.id === drag.cid; })[0];
+          if (it) { markChange('Перемещён элемент'); it.x = drag._x; it.y = drag._y; }
+        } else {
+          markChange('Перемещён блок: ' + (SECTION_LABELS[drag.key] || drag.key));
+          cfg.layout = cfg.layout || { order: ['summary', 'discount', 'shipping'] };
+          cfg.layout.free = cfg.layout.free || {};
+          cfg.layout.free[drag.key] = { x: drag._x, y: drag._y, w: drag.w };
+        }
       }
       drag = null; onEnd();
     }
@@ -943,6 +1015,77 @@
       flash('Ошибка: ' + err.message);
     }).then(function () { go.disabled = false; go.textContent = 'Собрать'; });
   }
+  /* ===================================================================== */
+  /* Add custom elements: pick in the toolbar -> click on the template      */
+  /* ===================================================================== */
+  var ADD_LABELS = { text: 'Текст', box: 'Блок / карточка', image: 'Картинка',
+    row: 'Строка «цена»', btn: 'Кнопка', badge: 'Бейдж', info: 'Инфо-блок', line: 'Линия' };
+  var placing = null, selId = null;
+
+  function setPlacing(type) {
+    placing = type;
+    document.body.classList.toggle('placing', !!type);
+    if (type) document.getElementById('placeHint').textContent =
+      'Кликните на шаблон — поставлю «' + ADD_LABELS[type] + '»   ·   Esc — отмена';
+  }
+  function uid() { return 'c' + Math.random().toString(36).slice(2, 8); }
+
+  function addCustom(type, x, y) {
+    state.custom = state.custom || [];
+    var d = (window.CUSTOM_DEFAULTS || {})[type] || {};
+    var c = { id: uid(), type: type, x: Math.max(0, x), y: Math.max(0, y) };
+    Object.keys(d).forEach(function (k) { c[k] = d[k]; });
+    markChange('Добавлен элемент: ' + ADD_LABELS[type]);
+    state.custom.push(c);
+    rebuildForm(); renderPreview(); selectCustom(c.id);
+    flash('«' + ADD_LABELS[type] + '» добавлен — тяните мышью, настройки слева');
+  }
+  function selectCustom(id) {
+    selId = id;
+    Array.prototype.forEach.call(preview.querySelectorAll('[data-custom]'), function (el) {
+      el.classList.toggle('sel', el.dataset.custom === id);
+    });
+    var det = controls.querySelector('details[data-sec="custom"]');
+    if (det) {
+      det.open = true;
+      var it = controls.querySelector('[data-cid="' + id + '"]');
+      if (it) it.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+  document.getElementById('addBtn').addEventListener('click', function () {
+    document.getElementById('addMenu').classList.toggle('open');
+  });
+  document.getElementById('addMenu').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-add]');
+    if (!b) return;
+    this.classList.remove('open');
+    setPlacing(b.dataset.add);
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.add-wrap')) document.getElementById('addMenu').classList.remove('open');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && placing) setPlacing(null);
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selId &&
+        !/input|textarea/i.test((e.target.tagName || ''))) {
+      var i = (state.custom || []).findIndex(function (c) { return c.id === selId; });
+      if (i >= 0) { markChange('Удалён элемент'); state.custom.splice(i, 1); selId = null; rebuildForm(); renderPreview(); }
+    }
+  });
+  // click on the canvas in placing mode -> drop the element there
+  preview.addEventListener('click', function (e) {
+    if (!placing) return;
+    var r = preview.getBoundingClientRect();
+    addCustom(placing, Math.round((e.clientX - r.left) / zoom), Math.round((e.clientY - r.top) / zoom));
+    setPlacing(null);
+  });
+  // click an existing custom element -> select it
+  preview.addEventListener('pointerdown', function (e) {
+    if (placing) return;
+    var el = e.target.closest && e.target.closest('[data-custom]');
+    if (el) selectCustom(el.dataset.custom);
+  });
+
   /* ---- API card (key + publish template + docs) ------------------------ */
   var apiKeyEl = document.getElementById('apiKey');
   function apiOrigin() { return location.origin + location.pathname.replace(/\/[^\/]*$/, ''); }
