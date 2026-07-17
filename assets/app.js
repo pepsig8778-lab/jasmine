@@ -1137,15 +1137,31 @@
   /* ---- format the SELECTED part of the text (bold / size / colour) ------ */
   var fmtBar = document.getElementById('fmtBar');
   function hideFmtBar() { fmtBar.style.display = 'none'; }
+  /* While editing the bar is ALWAYS visible: over the selection if there is one,
+     otherwise over the element itself (then formatting applies to the whole text). */
   function showFmtBarForSelection() {
     if (!editing) return hideFmtBar();
     var sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) return hideFmtBar();
-    var r = sel.getRangeAt(0).getBoundingClientRect();
-    if (!r.width && !r.height) return hideFmtBar();
+    var r = null;
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      var rr = sel.getRangeAt(0).getBoundingClientRect();
+      if (rr.width || rr.height) r = rr;
+    }
+    var whole = !r;
+    if (!r) r = editing.getBoundingClientRect();
     fmtBar.style.display = 'flex';
     fmtBar.style.left = (r.left + r.width / 2) + 'px';
     fmtBar.style.top = (r.top - 8) + 'px';
+    fmtBar.classList.toggle('whole', whole);
+    var tip = fmtBar.querySelector('.fmt-tip');
+    if (tip) tip.textContent = whole ? 'весь текст' : 'выделено';
+  }
+  /* No selection? Then the user means "the whole text" — select it silently. */
+  function ensureSelection() {
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) return;
+    var r = document.createRange(); r.selectNodeContents(editing);
+    sel.removeAllRanges(); sel.addRange(r);
   }
   document.addEventListener('selectionchange', function () {
     if (editing) showFmtBarForSelection();
@@ -1175,6 +1191,7 @@
   fmtBar.addEventListener('click', function (e) {
     var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
     var f = b.dataset.fmt;
+    ensureSelection();
     try { document.execCommand('styleWithCSS', false, true); } catch (err) {}
     if (f === 'bold' || f === 'italic' || f === 'underline') document.execCommand(f, false, null);
     else if (f === 'clear') document.execCommand('removeFormat', false, null);
@@ -1182,7 +1199,7 @@
     else if (f === 'smaller') styleSelection({ fontSize: Math.max(6, Math.round(selectionFontSize() / 1.2)) + 'px' });
   });
   document.getElementById('fmtColor').addEventListener('input', function () {
-    if (editing) styleSelection({ color: this.value });
+    if (editing) { ensureSelection(); styleSelection({ color: this.value }); }
   });
 
   function customById(id) {
@@ -1192,7 +1209,7 @@
      the format bar lets you make just that part bold / bigger / coloured. */
   function startInlineEdit(el, apply, initial) {
     if (editing) return;
-    editing = true;
+    editing = el;
     el.setAttribute('contenteditable', 'true');
     el.classList.add('inline-edit');
     el.focus();
@@ -1200,6 +1217,7 @@
       var rg = document.createRange(); rg.selectNodeContents(el);
       var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
     } catch (e) {}
+    setTimeout(showFmtBarForSelection, 0);
     function finish(commit) {
       if (!editing) return;
       editing = null; hideFmtBar();

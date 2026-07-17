@@ -232,6 +232,8 @@
     font-size:12.5px;min-width:28px;height:26px;padding:0 6px;border-radius:6px;cursor:pointer;}
   .fmt-bar button:hover{background:#22c55e;color:#062;}
   .fmt-bar .fs{width:1px;height:16px;background:var(--line);margin:0 3px;}
+  .fmt-tip{font-size:10px;color:#22c55e;padding:0 4px;white-space:nowrap;font-weight:600;}
+  .fmt-bar.whole .fmt-tip{color:#ffcf70;}
   .fmt-color{display:flex;align-items:center;justify-content:center;width:28px;height:26px;
     border-radius:6px;cursor:pointer;font-size:12px;position:relative;}
   .fmt-color:hover{background:#22c55e;}
@@ -417,6 +419,7 @@
 
   <div class="place-hint" id="placeHint"></div>
   <div class="fmt-bar" id="fmtBar" style="display:none">
+    <span class="fmt-tip">весь текст</span><span class="fs"></span>
     <button data-fmt="bold" title="Жирный (Ctrl+B)"><b>B</b></button>
     <button data-fmt="italic" title="Курсив (Ctrl+I)"><i>I</i></button>
     <button data-fmt="underline" title="Подчёркнутый (Ctrl+U)"><u>U</u></button>
@@ -428,7 +431,7 @@
     <button data-fmt="clear" title="Убрать форматирование">✕</button>
   </div>
   <div class="sel-bar" id="selBar" style="display:none">
-    <button data-sb="edit" title="Редактировать текст">✎ Текст</button>
+    <button data-sb="edit" title="Править текст (или двойной клик по элементу)">✎ Править текст</button>
     <button data-sb="dup" title="Дублировать">⧉</button>
     <button data-sb="del" title="Удалить (Del)">🗑</button>
   </div>
