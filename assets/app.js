@@ -849,11 +849,13 @@
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.drawImage(img, 0, 0);
       c.toBlob(function (blob) {
-        if (blob) download(blob, 'acquista-a-distanza@' + scale + 'x.png', 'image/png');
-        else alert('Экспорт не удался в этом браузере.');
+        if (blob) {
+          download(blob, 'acquista-a-distanza@' + scale + 'x.png', 'image/png');
+          flash('✓ Скачано: acquista-a-distanza@' + scale + 'x.png');
+        } else alert('Экспорт не удался в этом браузере.');
       }, 'image/png');
     };
-    img.onerror = function () { alert('Экспорт не удался: не удалось сериализовать вид.'); };
+    img.onerror = function () { alert('Экспорт не удался: не удалось сериализовать вид (проверьте, нет ли в тексте незакрытых тегов).'); };
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
 
