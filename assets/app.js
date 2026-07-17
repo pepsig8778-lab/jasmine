@@ -406,9 +406,26 @@
 
   /* ---- editor for user-added elements ---------------------------------- */
   var FONTS = [{ v: '', l: 'Как в шаблоне' }, { v: 'Arial, Helvetica, sans-serif', l: 'Arial' },
-    { v: '"Segoe UI", system-ui, sans-serif', l: 'Segoe UI' }, { v: 'Georgia, serif', l: 'Georgia' },
-    { v: '"Times New Roman", serif', l: 'Times' }, { v: 'Verdana, sans-serif', l: 'Verdana' },
-    { v: '"Courier New", monospace', l: 'Courier' }, { v: 'Impact, sans-serif', l: 'Impact' }];
+    { v: '"Segoe UI", system-ui, sans-serif', l: 'Segoe UI' },
+    { v: '"Roboto", "Segoe UI", sans-serif', l: 'Roboto' },
+    { v: '"Helvetica Neue", Helvetica, sans-serif', l: 'Helvetica Neue' },
+    { v: 'Tahoma, Geneva, sans-serif', l: 'Tahoma' },
+    { v: '"Trebuchet MS", sans-serif', l: 'Trebuchet MS' },
+    { v: 'Calibri, "Segoe UI", sans-serif', l: 'Calibri' },
+    { v: '"Century Gothic", "Apple Gothic", sans-serif', l: 'Century Gothic' },
+    { v: 'Georgia, serif', l: 'Georgia' },
+    { v: '"Times New Roman", serif', l: 'Times' },
+    { v: '"Palatino Linotype", Palatino, serif', l: 'Palatino' },
+    { v: 'Garamond, "Times New Roman", serif', l: 'Garamond' },
+    { v: 'Cambria, Georgia, serif', l: 'Cambria' },
+    { v: 'Verdana, sans-serif', l: 'Verdana' },
+    { v: '"Courier New", monospace', l: 'Courier' },
+    { v: 'Consolas, "Lucida Console", monospace', l: 'Consolas' },
+    { v: '"Comic Sans MS", cursive', l: 'Comic Sans' },
+    { v: '"Segoe Script", cursive', l: 'Segoe Script' },
+    { v: 'Impact, sans-serif', l: 'Impact' },
+    { v: '"Arial Black", sans-serif', l: 'Arial Black' },
+    { v: '"Arial Narrow", Arial, sans-serif', l: 'Arial Narrow' }];
   var ALIGN2 = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
   var TRANSFORM = [{ v: 'none', l: 'Как есть' }, { v: 'uppercase', l: 'ВЕРХНИЙ' },
     { v: 'lowercase', l: 'нижний' }, { v: 'capitalize', l: 'С Заглавной' }];
@@ -573,12 +590,8 @@
     var qr = qrSection(state.qr || {});
 
     var style =
-      fSelect('Шрифт', 'theme.font', [
-        { v: '', l: 'Системный (Segoe UI)' },
-        { v: 'Arial, Helvetica, sans-serif', l: 'Arial / Helvetica' },
-        { v: '"Roboto", system-ui, sans-serif', l: 'Roboto' },
-        { v: 'Verdana, Geneva, sans-serif', l: 'Verdana' },
-        { v: '"Trebuchet MS", sans-serif', l: 'Trebuchet MS' }]) +
+      fSelect('Шрифт', 'theme.font', [{ v: '', l: 'Системный (Segoe UI)' }]
+        .concat(FONTS.slice(1).map(function (f) { return { v: f.v, l: f.l }; }))) +
       fRange('Скругление карточек', 'theme.cardRadius', 0, 24, 1) +
       '<div class="theme-grid">' + theme + '</div>';
 
@@ -1551,6 +1564,16 @@
     rebuildForm();
     if (lastListingData) reapplyParser();      // live: re-point the QR right away
     else renderPreview();
+  });
+  // One click puts the link on the template as a {{link}} text block (or jumps
+  // to the one that is already there) — no need to know about the add-menu.
+  document.getElementById('pQrPlace').addEventListener('click', function () {
+    var ex = (state.custom || []).filter(function (c) {
+      return /\{\{\s*link\s*\}\}/.test(String(c.text || ''));
+    })[0];
+    switchTab('builder');
+    if (ex) { selectCustom(ex.id); flash('Блок со ссылкой уже на шаблоне — выделил его'); }
+    else { addCustom('link', 53, 380); flash('Блок «Ссылка» добавлен — тяните его куда нужно'); }
   });
 
   document.getElementById('pGo').addEventListener('click', parserLoad);

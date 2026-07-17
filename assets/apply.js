@@ -28,7 +28,9 @@
   /* Options for the styled QR renderer, from a qr config. */
   function qrOpts(q) {
     return {
-      data: q.data, ecl: q.ecl || 'M', scale: 8,
+      // no explicit data yet -> encode the link pasted in the Parser, so the
+      // QR works in the constructor before anything is parsed
+      data: q.data || q.linkOverride, ecl: q.ecl || 'M', scale: 8,
       moduleShape: q.moduleShape || 'square', eyeShape: q.eyeShape || 'square',
       dark: q.dark || '#000000',
       // transparent -> the QR sits directly on the themed card (no white slab)
@@ -44,7 +46,7 @@
   function renderQR(q) {
     if (!q) return Promise.resolve();
     if (q.mode === 'custom') { q.image = q.custom || ''; return Promise.resolve(); }
-    if (!q.data || !root.QR || !root.QR.render) { q.image = ''; return Promise.resolve(); }
+    if ((!q.data && !q.linkOverride) || !root.QR || !root.QR.render) { q.image = ''; return Promise.resolve(); }
     return root.QR.render(qrOpts(q)).then(function (url) { q.image = url; },
                                           function () { q.image = ''; });
   }

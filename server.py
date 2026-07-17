@@ -64,6 +64,14 @@ class Handler(SimpleHTTPRequestHandler):
     def _is_local(self):
         return self.client_address and self.client_address[0] in ("127.0.0.1", "::1", "localhost")
 
+    def end_headers(self):
+        # Static files must revalidate on every load: without this, browsers
+        # keep serving a cached app.js after a deploy and users keep hitting
+        # bugs that are already fixed. (API responses set their own headers.)
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(parsed.query)

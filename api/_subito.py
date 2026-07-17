@@ -76,13 +76,23 @@ def _syscurl_html(url):
     return out.stdout.decode("utf-8", "replace") if out.returncode == 0 and out.stdout else None
 
 
+def normalize_url(url):
+    """People paste links without a scheme ("www.subito.it/...") — urlparse
+    then sees no hostname and validation wrongly rejects a perfectly good
+    listing. Add https:// when missing; also trim whitespace."""
+    url = (url or "").strip()
+    if url and not re.match(r"^https?://", url, re.I):
+        url = "https://" + url.lstrip("/")
+    return url
+
+
 def is_subito_url(url):
     """True only if the URL's actual HOST is subito.it (or a subdomain).
     A naive substring check like `"subito.it" in url` can be spoofed by
     e.g. https://evil.example.com/x-1.htm?ref=subito.it — which would let
     anyone tunnel arbitrary sites through our paid proxy."""
     try:
-        host = (urllib.parse.urlparse(url).hostname or "").lower()
+        host = (urllib.parse.urlparse(normalize_url(url)).hostname or "").lower()
     except ValueError:
         return False
     return host == "subito.it" or host.endswith(".subito.it")
@@ -260,11 +270,13 @@ def fetch_data(url, opts=None):
     if opts:
         o.update({k: v for k, v in opts.items() if v is not None})
 
+    url = normalize_url(url)
     # Fail fast: without an ad id this can never be a listing, so don't burn
     # ~30s of proxy retries before telling the user.
     if not _listing_id(url):
-        raise ValueError("Это не ссылка на объявление. Нужен вид "
-                         ".../nome-annuncio-123456789.htm")
+        raise ValueError("Это ссылка на subito.it, но не на объявление. Откройте "
+                         "сам товар и скопируйте адрес — он оканчивается на "
+                         "-1234567890.htm")
 
     html = fetch_html(url)                     # guaranteed to contain a Product card
     prod = extract_ldjson(html) or {}
