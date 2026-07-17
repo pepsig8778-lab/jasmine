@@ -28,16 +28,29 @@
   }
 
   /* ---- state ----------------------------------------------------------- */
-  var state;
-  try {
-    var saved = localStorage.getItem(LS_KEY);
-    state = saved ? window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(saved))
-                  : clone(window.DEFAULT_CONFIG);
-  } catch (e) { state = clone(window.DEFAULT_CONFIG); }
+  /* The user's template lives in the browser (localStorage), so a new DEPLOY
+     never resets it: new code just merges any NEW default fields UNDER the
+     saved template — the user's own edits always win. */
+  var LS_BACKUP = LS_KEY + ':backup';
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 
-  function persist() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+  function loadState() {
+    var raw = lsGet(LS_KEY);
+    if (!raw) return clone(window.DEFAULT_CONFIG);
+    try {
+      // saved OVER defaults -> new fields appear, user's settings are kept
+      return window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw));
+    } catch (e) {
+      lsSet(LS_BACKUP, raw);          // corrupt: keep a copy, never lose it silently
+      return clone(window.DEFAULT_CONFIG);
+    }
   }
+  var state = loadState();
+
+  function persist() { lsSet(LS_KEY, JSON.stringify(state)); }
+  function backupState() { return lsSet(LS_BACKUP, JSON.stringify(state)); }
+  function hasBackup() { return !!lsGet(LS_BACKUP); }
 
   /* ---- DOM refs -------------------------------------------------------- */
   var preview = document.getElementById('preview');
@@ -592,10 +605,27 @@
     };
     r.readAsText(f); e.target.value = '';
   });
+  function updateRestoreBtn() {
+    var b = document.getElementById('restore');
+    if (b) b.style.display = hasBackup() ? '' : 'none';
+  }
   bind('reset', function () {
-    if (!confirm('Сбросить к исходному шаблону?')) return;
+    if (!confirm('Сбросить шаблон к исходному виду?\n\n' +
+                 'Текущие настройки сохранятся в резервную копию — их можно вернуть ' +
+                 'кнопкой «Восстановить».')) return;
+    backupState();
     state = clone(window.DEFAULT_CONFIG);
-    rebuildForm(); renderPreview(); flash('Сброшено');
+    rebuildForm(); renderPreview(); updateRestoreBtn();
+    flash('Сброшено — можно вернуть кнопкой «Восстановить»');
+  });
+  bind('restore', function () {
+    var raw = lsGet(LS_BACKUP);
+    if (!raw) { flash('Резервной копии нет'); return; }
+    if (!confirm('Восстановить шаблон из резервной копии?\n\nТекущий вид будет заменён.')) return;
+    try {
+      state = window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw));
+    } catch (e) { flash('Резервная копия повреждена'); return; }
+    genQR().then(function () { rebuildForm(); renderPreview(); flash('Шаблон восстановлен'); });
   });
 
   function flash(msg) {
@@ -886,6 +916,7 @@
   buildForm();
   renderPreview();
   renderParserOpts();
+  updateRestoreBtn();
   // (re)render the QR with the styled engine if it's on
   if (state.qr && state.qr.show && (state.qr.data || state.qr.mode === 'custom')) {
     genQR().then(renderPreview);

@@ -175,8 +175,10 @@
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:650;}
 
   .panel-foot{border-top:1px solid var(--line);padding:12px 14px;display:grid;
-    grid-template-columns:1fr 1fr;gap:8px;}
+    grid-template-columns:1fr 1fr;gap:8px;flex:0 0 auto;}
   .panel-foot .wide{grid-column:1 / -1;}
+  .saved-note{margin:2px 0 0;font-size:10.5px;color:var(--ink-dim);line-height:1.45;}
+  .saved-note b{color:#9fe0b5;}
 
   /* ---------------- stage ---------------- */
   .stage{display:flex;flex-direction:column;min-height:0;background:var(--bg);}
@@ -224,7 +226,10 @@
           <button class="btn" id="copyJson">Копировать</button>
           <button class="btn" id="downloadJson">Скачать JSON</button>
           <button class="btn" id="importJson">Импорт JSON</button>
-          <button class="btn ghost" id="reset">Сбросить</button>
+          <button class="btn ghost" id="reset">↺ Сбросить шаблон</button>
+          <button class="btn ghost wide" id="restore" style="display:none">⟲ Восстановить из копии</button>
+          <p class="saved-note wide">💾 Шаблон хранится в вашем браузере и <b>не сбрасывается</b>
+            при обновлении сайта. Для переноса — «Скачать JSON».</p>
           <input type="file" id="importFile" accept="application/json" hidden>
         </div>
       </aside>
