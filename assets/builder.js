@@ -211,7 +211,10 @@
       return '';
     }
     return {
-      link: q.linkOverride || q.data || '',      // what the QR points at
+      // q.data holds whatever applyListingData() already resolved the QR to
+      // (per-request override > saved template override > listing URL) —
+      // mirror that exactly so the {{link}} text always matches the QR.
+      link: q.data || q.linkOverride || '',
       title: (s.product && s.product.title) || '',
       price: rowVal(/oggett|item|prezzo|товар|цена/i),
       shipping: rowVal(/spediz|shipping|достав/i),

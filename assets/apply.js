@@ -73,11 +73,12 @@
     var ship = shipRow ? parsePriceJS(shipRow.value) : (data.ship_pickup || 0);
     if (s.total) s.total.value = eurJS(data.price + ship + data.protezione);
 
-    // QR: keep the template's style; custom stays, generated points at the listing
+    // QR: keep the template's style; custom stays, generated points at a link.
+    // Priority: this request's own qrLinkOverride (API caller's ?qrUrl=) >
+    // the template's saved "Ссылка для QR" (qr.linkOverride) > the listing URL.
     if (cfg.qr) {
       if (cfg.qr.mode === 'custom') cfg.qr.image = cfg.qr.custom || cfg.qr.image || '';
-      // a link pasted in the Parser (qr.linkOverride) wins over the listing URL
-      else cfg.qr.data = cfg.qr.linkOverride || data.url;
+      else cfg.qr.data = data.qrLinkOverride || cfg.qr.linkOverride || data.url;
     }
     return cfg;
   }

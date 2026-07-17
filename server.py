@@ -92,12 +92,18 @@ class Handler(SimpleHTTPRequestHandler):
             url = (q.get("url", [""])[0] or "").strip()
             if not _subito.is_subito_url(url):
                 return self._json({"ok": False, "error": "нужен параметр url= со ссылкой subito.it"}, 400)
+            # Second, independent link: what the QR (and any {{link}} block) should
+            # point to. Never fetched — just encoded — so it isn't restricted to
+            # subito.it and only needs a sanity length cap.
+            qr_url = (q.get("qrUrl", [""])[0] or "").strip()[:2000]
             try:
                 scale = int(q.get("scale", ["2"])[0])
             except ValueError:
                 scale = 2
             try:
                 data = _subito.fetch_data(url, opts_from_query(q))
+                if qr_url:
+                    data["qrLinkOverride"] = qr_url
                 tpl, _src = _store.load_template()
                 return self._png(_render.render_png(tpl, data, scale))
             except Exception as e:  # noqa: BLE001
