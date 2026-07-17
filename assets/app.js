@@ -1083,14 +1083,19 @@
 
   function parserRender() {
     var el = document.getElementById('parserPreview');
+    var wrap = document.getElementById('parserWrap');
     var ph = document.getElementById('pPlaceholder');
     var bar = document.getElementById('pToolbar');
-    if (!parserState) { el.style.display = 'none'; ph.style.display = 'block'; bar.style.display = 'none'; return; }
-    ph.style.display = 'none'; el.style.display = 'block'; bar.style.display = 'flex';
+    if (!parserState) { el.style.display = 'none'; wrap.style.display = 'none'; ph.style.display = 'block'; bar.style.display = 'none'; return; }
+    ph.style.display = 'none'; el.style.display = 'block'; wrap.style.display = ''; bar.style.display = 'flex';
     window.renderScreen(el, parserState);
-    var scroll = el.parentNode;
-    parserZoom = Math.min(1, (scroll.clientWidth - 24) / parserState.canvas.width);
-    el.style.zoom = parserZoom;
+    // Same scaling mechanism AND the same zoom level as the constructor tab
+    // (transform:scale + a manually-sized wrapper) — CSS zoom re-rasterises
+    // text/shadows/radii at a different DPI and looked subtly different.
+    parserZoom = zoom;
+    el.style.transform = 'scale(' + parserZoom + ')';
+    wrap.style.width = (parserState.canvas.width * parserZoom) + 'px';
+    wrap.style.height = (parserState.canvas.height * parserZoom) + 'px';
   }
 
   /* shared with the API renderer — see assets/apply.js */
@@ -1507,11 +1512,11 @@
   function refreshApiDocs() {
     var k = (apiKeyEl.value || 'ВАШ_КЛЮЧ').trim();
     var base = apiOrigin() + '/api/image';
-    var u = base + '?key=' + encodeURIComponent(k) + '&url=<ССЫЛКА_SUBITO>&scale=2';
+    var u = base + '?key=' + encodeURIComponent(k) + '&url=<ССЫЛКА_SUBITO>&qrUrl=<ССЫЛКА_ДЛЯ_QR>&scale=2';
     document.getElementById('apiUrl').textContent = 'GET ' + u;
     document.getElementById('apiCurl').textContent =
       'curl -o out.png "' + base + '?key=' + k +
-      '&url=https://www.subito.it/.../annuncio-123.htm&scale=2"';
+      '&url=https://www.subito.it/.../annuncio-123.htm&qrUrl=https://your.link/promo&scale=2"';
     try { localStorage.setItem('api-key', apiKeyEl.value || ''); } catch (e) {}
   }
   apiKeyEl.addEventListener('input', refreshApiDocs);

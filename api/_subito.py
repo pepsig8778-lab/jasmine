@@ -51,7 +51,11 @@ def proxy_url():
 
 
 # ---------------------------------------------------------------- fetch ------
-TIMEOUT = 22
+# A proxy attempt that's going to work responds in a few seconds; one that's
+# dead/blocked rarely benefits from waiting the full 22s before the next
+# retry gets a fresh exit IP. RETRIES stays high (Akamai soft-blocks need a
+# handful of different exit IPs to get past) — only the per-try budget shrinks.
+TIMEOUT = 10
 
 
 def _cffi():
@@ -146,14 +150,14 @@ def fetch_image_bytes(url):
             px = proxy_url() if use_proxy else None
             proxies = {"http": px, "https": px} if px else None
             try:
-                r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=15)
+                r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=9)
                 if r.status_code == 200 and r.content:
                     return r.content
             except Exception:           # noqa: BLE001
                 pass
     exe = shutil.which("curl") or shutil.which("curl.exe")
     if exe:
-        out = subprocess.run([exe, "-sSL", "--max-time", "15", "-A", UA, url], capture_output=True)
+        out = subprocess.run([exe, "-sSL", "--max-time", "9", "-A", UA, url], capture_output=True)
         if out.returncode == 0 and out.stdout:
             return out.stdout
     return None
