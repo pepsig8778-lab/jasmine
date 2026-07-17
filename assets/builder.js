@@ -392,69 +392,103 @@
   /* ----------------------------------------------------------------------- */
   /* ---- custom user elements -------------------------------------------- */
   var CUSTOM_DEFAULTS = {
-    text:  { w: 200, text: 'Текст', size: 14, weight: 400, color: '', align: 'left', bg: '', pad: 0, radius: 0 },
-    box:   { w: 200, h: 90, bg: '', border: '', radius: 12, shadow: true },
-    image: { w: 120, h: 120, src: '', radius: 8, fit: 'cover' },
-    line:  { w: 220, h: 1, color: '' },
-    btn:   { w: 220, h: 34, text: 'Кнопка', color: '', bg: '', border: '', radius: 20, size: 14 },
-    badge: { text: 'NUOVO', color: '', bg: '', radius: 4, size: 10 },
-    info:  { w: 300, text: 'Пояснение к заказу', bg: '', color: '', radius: 9, size: 12 },
-    row:   { w: 300, label: 'Название', value: '0,00 €', size: 14, color: '', vcolor: '', weight: 400 }
+    text:  { w:200, text:'Текст', size:14, weight:400, color:'', align:'left', bg:'', pad:0,
+             radius:0, lh:1.3, ls:0, font:'', transform:'none', border:'', bw:0, shadow:false,
+             opacity:100, rotate:0 },
+    box:   { w:200, h:90, bg:'', border:'', bw:1, radius:12, shadow:true, opacity:100, rotate:0, pad:0 },
+    image: { w:120, h:120, src:'', radius:8, fit:'cover', border:'', bw:0, shadow:false,
+             opacity:100, rotate:0 },
+    line:  { w:220, h:1, color:'', style:'solid', opacity:100, rotate:0 },
+    btn:   { w:220, h:34, text:'Кнопка', color:'', bg:'', border:'', bw:1, radius:20, size:14,
+             weight:700, font:'', shadow:false, opacity:100, rotate:0, ls:0, lh:1.3, pad:0 },
+    badge: { text:'NUOVO', color:'', bg:'', radius:4, size:10, weight:700, pad:3, ls:0.6,
+             transform:'uppercase', border:'', bw:0, opacity:100, rotate:0, font:'', lh:1.3 },
+    info:  { w:300, text:'Пояснение к заказу', bg:'', color:'', radius:9, size:12, pad:10,
+             icon:true, iconColor:'', lh:1.42, align:'left', border:'', bw:0, shadow:false,
+             opacity:100, rotate:0, font:'', weight:400, ls:0 },
+    row:   { w:300, label:'Название', value:'0,00 €', size:14, color:'', vcolor:'', weight:400,
+             lweight:400, lh:1.3, font:'', opacity:100, rotate:0, pad:0, bg:'', radius:0,
+             border:'', bw:0 }
   };
   function withDefaults(c) {
     var d = CUSTOM_DEFAULTS[c.type] || {};
-    var o = {}; Object.keys(d).forEach(function (k) { o[k] = c[k] == null ? d[k] : c[k]; });
-    o.type = c.type; o.id = c.id; o.x = c.x || 0; o.y = c.y || 0; o.z = c.z || 30;
-    if (c.w != null) o.w = c.w; if (c.h != null) o.h = c.h;
+    var o = {};
+    Object.keys(d).forEach(function (k) { o[k] = d[k]; });        // type defaults
+    Object.keys(c).forEach(function (k) { if (c[k] != null) o[k] = c[k]; });  // ANY user prop wins
+    o.type = c.type; o.id = c.id; o.x = c.x || 0; o.y = c.y || 0; o.z = c.z == null ? 30 : c.z;
     return o;
+  }
+  /* shared visual props every element understands */
+  function boxStyle(c, opt) {
+    opt = opt || {};
+    var s = 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z + ';';
+    if (c.w != null) s += 'width:' + c.w + 'px;';
+    if (c.h != null && opt.height !== false) s += 'height:' + c.h + 'px;';
+    if (c.bw) s += 'border:' + c.bw + 'px ' + (c.style || 'solid') + ' ' + (c.border || 'var(--border)') + ';';
+    if (c.radius) s += 'border-radius:' + c.radius + 'px;';
+    if (c.pad) s += 'padding:' + c.pad + 'px;';
+    if (c.bg) s += 'background:' + c.bg + ';';
+    if (c.shadow) s += 'box-shadow:0 2px 10px rgba(24,39,75,.18);';
+    if (c.opacity != null && c.opacity < 100) s += 'opacity:' + (c.opacity / 100) + ';';
+    if (c.rotate) s += 'transform:rotate(' + c.rotate + 'deg);';
+    if (c.font) s += 'font-family:' + c.font + ';';
+    if (c.ls) s += 'letter-spacing:' + c.ls + 'px;';
+    if (c.lh) s += 'line-height:' + c.lh + ';';
+    if (c.transform && c.transform !== 'none') s += 'text-transform:' + c.transform + ';';
+    return s;
   }
   function buildCustom(cfg) {
     var list = cfg.custom || [];
     return list.map(function (raw) {
       var c = withDefaults(raw);
-      var box = 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z + ';' +
-        (c.w != null ? 'width:' + c.w + 'px;' : '') + (c.h != null && c.type !== 'text' ? 'height:' + c.h + 'px;' : '');
       var A = ' class="sc-custom sc-c-' + c.type + '" data-custom="' + esc(c.id) + '" style="';
 
       if (c.type === 'image') {
-        return '<img' + A + box + 'object-fit:' + c.fit + ';border-radius:' + c.radius + 'px;" src="' +
-          esc(c.src) + '" alt="">';
+        return '<img' + A + boxStyle(c) + 'object-fit:' + c.fit + ';" src="' + esc(c.src) + '" alt="">';
       }
       if (c.type === 'line') {
-        return '<div' + A + box + 'height:' + c.h + 'px;background:' + (c.color || 'var(--divider)') + ';"></div>';
+        var ls = 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z + ';width:' + c.w + 'px;';
+        if (c.opacity < 100) ls += 'opacity:' + (c.opacity / 100) + ';';
+        if (c.rotate) ls += 'transform:rotate(' + c.rotate + 'deg);';
+        if (c.style === 'solid') ls += 'height:' + c.h + 'px;background:' + (c.color || 'var(--divider)') + ';';
+        else ls += 'height:0;border-top:' + c.h + 'px ' + c.style + ' ' + (c.color || 'var(--divider)') + ';';
+        return '<div' + A + ls + '"></div>';
       }
       if (c.type === 'box') {
-        return '<div' + A + box + 'background:' + (c.bg || 'var(--card)') + ';border:1px solid ' +
-          (c.border || 'var(--border)') + ';border-radius:' + c.radius + 'px;' +
-          (c.shadow ? 'box-shadow:0 1px 2px rgba(24,39,75,.05);' : '') + '"></div>';
+        var b = withDefaults(raw); if (!b.bg) b.bg = 'var(--card)'; if (!b.border) b.border = 'var(--border)';
+        return '<div' + A + boxStyle(b) + '"></div>';
       }
       if (c.type === 'btn') {
-        return '<div' + A + box + 'background:' + (c.bg || 'var(--btn-bg,var(--card))') + ';color:' +
-          (c.color || 'var(--red)') + ';border:1px solid ' + (c.border || 'var(--btn-border)') +
-          ';border-radius:' + c.radius + 'px;font-size:' + c.size + 'px;">' + esc(c.text) + '</div>';
+        var bb = withDefaults(raw);
+        if (!bb.bg) bb.bg = 'var(--btn-bg,var(--card))'; if (!bb.border) bb.border = 'var(--btn-border)';
+        return '<div' + A + boxStyle(bb) + 'color:' + (c.color || 'var(--red)') +
+          ';font-size:' + c.size + 'px;font-weight:' + c.weight + ';">' + rich(c.text) + '</div>';
       }
       if (c.type === 'badge') {
-        return '<div' + A + 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z +
-          ';background:' + (c.bg || 'var(--badge-bg)') + ';color:' + (c.color || 'var(--badge-text)') +
-          ';border-radius:' + c.radius + 'px;font-size:' + c.size + 'px;padding:3px 7px;">' +
-          rich(c.text) + '</div>';
+        var ba = withDefaults(raw); if (!ba.bg) ba.bg = 'var(--badge-bg)'; ba.w = null; ba.h = null;
+        return '<div' + A + boxStyle(ba, { height: false }) + 'color:' + (c.color || 'var(--badge-text)') +
+          ';font-size:' + c.size + 'px;font-weight:' + c.weight + ';padding:' + c.pad + 'px ' +
+          (c.pad * 2 + 1) + 'px;">' + rich(c.text) + '</div>';
       }
       if (c.type === 'info') {
-        return '<div' + A + box + 'background:' + (c.bg || 'var(--info-bg)') + ';color:' +
-          (c.color || 'var(--info-text)') + ';border-radius:' + c.radius + 'px;padding:10px 12px;font-size:' +
-          c.size + 'px;line-height:1.42;"><span class="ico">' + ICONS.info + '</span><span class="txt">' +
-          rich(c.text) + '</span></div>';
+        var ii = withDefaults(raw); if (!ii.bg) ii.bg = 'var(--info-bg)'; ii.h = null;
+        return '<div' + A + boxStyle(ii, { height: false }) + 'color:' + (c.color || 'var(--info-text)') +
+          ';font-size:' + c.size + 'px;text-align:' + c.align + ';">' +
+          (c.icon ? '<span class="ico" style="color:' + (c.iconColor || 'inherit') + '">' + ICONS.info + '</span>' : '') +
+          '<span class="txt">' + rich(c.text) + '</span></div>';
       }
       if (c.type === 'row') {
-        return '<div' + A + box + 'font-size:' + c.size + 'px;"><span data-part="label" style="color:' +
-          (c.color || 'var(--text)') + '">' + rich(c.label) + '</span><span data-part="value" style="color:' +
-          (c.vcolor || 'var(--text)') + ';font-weight:' + c.weight + '">' + rich(c.value) + '</span></div>';
+        var rr = withDefaults(raw); rr.h = null;
+        return '<div' + A + boxStyle(rr, { height: false }) + 'font-size:' + c.size + 'px;">' +
+          '<span data-part="label" style="color:' + (c.color || 'var(--text)') + ';font-weight:' + c.lweight + '">' +
+          rich(c.label) + '</span><span data-part="value" style="color:' + (c.vcolor || 'var(--text)') +
+          ';font-weight:' + c.weight + '">' + rich(c.value) + '</span></div>';
       }
       // text
-      return '<div' + A + box + 'font-size:' + c.size + 'px;font-weight:' + c.weight + ';color:' +
-        (c.color || 'var(--text)') + ';text-align:' + c.align + ';line-height:1.3;' +
-        (c.bg ? 'background:' + c.bg + ';' : '') + (c.pad ? 'padding:' + c.pad + 'px;' : '') +
-        (c.radius ? 'border-radius:' + c.radius + 'px;' : '') + '">' + rich(c.text) + '</div>';
+      var tt = withDefaults(raw); tt.h = null;
+      return '<div' + A + boxStyle(tt, { height: false }) + 'font-size:' + c.size +
+        'px;font-weight:' + c.weight + ';color:' + (c.color || 'var(--text)') +
+        ';text-align:' + c.align + ';">' + rich(c.text) + '</div>';
     }).join('');
   }
 

@@ -35,15 +35,26 @@
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 
+  /* The renderer falls back to CUSTOM_DEFAULTS, so an unset prop still DRAWS a
+     value — but the panel reads state and would show empty/wrong. Materialise
+     the defaults so panel and canvas always agree. */
+  function fillCustomDefaults(cfg) {
+    (cfg.custom || []).forEach(function (c) {
+      var d = (window.CUSTOM_DEFAULTS || {})[c.type] || {};
+      Object.keys(d).forEach(function (k) { if (c[k] === undefined) c[k] = d[k]; });
+      if (c.z == null) c.z = 30;
+    });
+    return cfg;
+  }
   function loadState() {
     var raw = lsGet(LS_KEY);
-    if (!raw) return clone(window.DEFAULT_CONFIG);
+    if (!raw) return fillCustomDefaults(clone(window.DEFAULT_CONFIG));
     try {
       // saved OVER defaults -> new fields appear, user's settings are kept
-      return window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw));
+      return fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw)));
     } catch (e) {
       lsSet(LS_BACKUP, raw);          // corrupt: keep a copy, never lose it silently
-      return clone(window.DEFAULT_CONFIG);
+      return fillCustomDefaults(clone(window.DEFAULT_CONFIG));
     }
   }
   var state = loadState();
@@ -394,39 +405,88 @@
   }
 
   /* ---- editor for user-added elements ---------------------------------- */
-  function customFields(c, p) {
-    var ALIGN = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
+  var FONTS = [{ v: '', l: 'Как в шаблоне' }, { v: 'Arial, Helvetica, sans-serif', l: 'Arial' },
+    { v: '"Segoe UI", system-ui, sans-serif', l: 'Segoe UI' }, { v: 'Georgia, serif', l: 'Georgia' },
+    { v: '"Times New Roman", serif', l: 'Times' }, { v: 'Verdana, sans-serif', l: 'Verdana' },
+    { v: '"Courier New", monospace', l: 'Courier' }, { v: 'Impact, sans-serif', l: 'Impact' }];
+  var ALIGN2 = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
+  var TRANSFORM = [{ v: 'none', l: 'Как есть' }, { v: 'uppercase', l: 'ВЕРХНИЙ' },
+    { v: 'lowercase', l: 'нижний' }, { v: 'capitalize', l: 'С Заглавной' }];
+  var LSTYLE = [{ v: 'solid', l: 'Сплошная' }, { v: 'dashed', l: 'Пунктир' }, { v: 'dotted', l: 'Точки' }];
+  var WEIGHTS = [{ v: 300, l: 'Тонкий' }, { v: 400, l: 'Обычный' }, { v: 600, l: 'Полужирный' },
+    { v: 700, l: 'Жирный' }, { v: 800, l: 'Чёрный' }];
+
+  /* ---- reusable property groups (same language for every element) ------ */
+  function grpText(p, o) {
+    o = o || {};
+    return '<div class="sub">Текст</div>' +
+      '<div class="grid2">' + fNum('Размер, px', p + 'size', 6, 96, 1) +
+        fSelect('Жирность', p + 'weight', WEIGHTS) + '</div>' +
+      '<div class="grid2">' + fSelect('Шрифт', p + 'font', FONTS) + fColorOpt('Цвет', p + 'color') + '</div>' +
+      (o.noAlign ? '' : fSelect('Выравнивание', p + 'align', ALIGN2)) +
+      '<div class="grid2">' + fNum('Межстрочный', p + 'lh', 0.8, 3, 0.05) +
+        fNum('Межбуквенный', p + 'ls', -2, 10, 0.1) + '</div>' +
+      (o.noTransform ? '' : fSelect('Регистр', p + 'transform', TRANSFORM));
+  }
+  function grpBox(p, o) {
+    o = o || {};
+    return '<div class="sub">Фон и рамка</div>' +
+      '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#ffffff') +
+        fColorOpt('Цвет рамки', p + 'border', '#e7e9ef') + '</div>' +
+      '<div class="grid2">' + fNum('Толщина рамки', p + 'bw', 0, 12, 1) +
+        fNum('Скругление', p + 'radius', 0, 100, 1) + '</div>' +
+      '<div class="grid2">' + fNum('Внутр. отступ', p + 'pad', 0, 60, 1) +
+        (o.noShadow ? '' : fCheck('Тень', p + 'shadow')) + '</div>';
+  }
+  function grpGeom(p, i, o) {
+    o = o || {};
+    return '<div class="sub">Размер и положение</div>' +
+      '<div class="grid2">' + fNum('X', p + 'x', -400, 1600, 1) + fNum('Y', p + 'y', -400, 3000, 1) + '</div>' +
+      (o.noW && o.noH ? '' : '<div class="grid2">' + (o.noW ? '' : fNum('Ширина', p + 'w', 4, 1600, 1)) +
+        (o.noH ? '' : fNum('Высота', p + 'h', 1, 2000, 1)) + '</div>') +
+      '<div class="grid2">' + fNum('Поворот, °', p + 'rotate', -180, 180, 1) +
+        fNum('Прозрачн., %', p + 'opacity', 5, 100, 5) + '</div>' +
+      '<div class="fld"><span class="fld-l">Слой (порядок наложения)</span><div class="pills">' +
+        '<button class="pill" data-act="zBack" data-i="' + i + '">назад</button>' +
+        '<button class="pill" data-act="zFront" data-i="' + i + '">вперёд</button>' +
+      '</div></div>';
+  }
+
+  function customFields(c, p, i) {
     switch (c.type) {
-      case 'text': return fRichText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 5 }) +
-        '<div class="grid2">' + fRange('Размер', p + 'size', 8, 48, 1) + fRange('Жирность', p + 'weight', 300, 900, 100) + '</div>' +
-        '<div class="grid2">' + fColorOpt('Цвет', p + 'color') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
-        '<div class="grid2">' + fSelect('Выравнивание', p + 'align', ALIGN) + fNum('Ширина', p + 'w', 20, 900, 1) + '</div>' +
-        '<div class="grid2">' + fNum('Отступ', p + 'pad', 0, 40, 1) + fNum('Скругление', p + 'radius', 0, 30, 1) + '</div>';
-      case 'box': return '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
-        '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#ffffff') + fColorOpt('Рамка', p + 'border', '#e7e9ef') + '</div>' +
-        fNum('Скругление', p + 'radius', 0, 40, 1) + fCheck('Тень', p + 'shadow');
-      case 'image': return fFile('Картинка', p + 'src') +
-        '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
-        '<div class="grid2">' + fNum('Скругление', p + 'radius', 0, 200, 1) +
-          fSelect('Вписывание', p + 'fit', [{ v: 'cover', l: 'Заполнить' }, { v: 'contain', l: 'Вместить' }]) + '</div>';
-      case 'line': return '<div class="grid2">' + fNum('Длина', p + 'w', 10, 900, 1) + fNum('Толщина', p + 'h', 1, 12, 1) + '</div>' +
-        fColorOpt('Цвет', p + 'color', '#eef0f3');
-      case 'btn': return fRichText('Текст', p + 'text') +
-        '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fNum('Высота', p + 'h', 20, 80, 1) + '</div>' +
-        '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
-        '<div class="grid2">' + fColorOpt('Рамка', p + 'border', '#dfe3ed') + fNum('Скругление', p + 'radius', 0, 40, 1) + '</div>';
-      case 'badge': return fRichText('Текст', p + 'text') +
-        '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#feeceb') + '</div>' +
-        '<div class="grid2">' + fRange('Размер', p + 'size', 7, 20, 1) + fNum('Скругление', p + 'radius', 0, 20, 1) + '</div>';
-      case 'info': return fRichText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 4 }) +
-        '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#e9edff') + fColorOpt('Текст', p + 'color', '#26316d') + '</div>' +
-        '<div class="grid2">' + fNum('Ширина', p + 'w', 60, 900, 1) + fRange('Размер', p + 'size', 8, 20, 1) + '</div>';
-      case 'row': return '<div class="grid2">' + fRichText('Слева', p + 'label') + fRichText('Справа', p + 'value') + '</div>' +
+      case 'text': return fRichText('Содержимое (Enter — новая строка)', p + 'text', { rows: 4 }) +
+        grpText(p) + grpBox(p) + grpGeom(p, i, { noH: true });
+      case 'info': return fRichText('Содержимое (Enter — новая строка)', p + 'text', { rows: 3 }) +
+        '<div class="grid2">' + fCheck('Иконка', p + 'icon') + fColorOpt('Цвет иконки', p + 'iconColor') + '</div>' +
+        grpText(p, { noTransform: true }) + grpBox(p) + grpGeom(p, i, { noH: true });
+      case 'btn': return fRichText('Надпись', p + 'text', { rows: 1 }) +
+        grpText(p, { noAlign: true, noTransform: true }) + grpBox(p) + grpGeom(p, i);
+      case 'badge': return fRichText('Надпись', p + 'text', { rows: 1 }) +
+        grpText(p, { noAlign: true }) + grpBox(p, { noShadow: true }) + grpGeom(p, i, { noW: true, noH: true });
+      case 'row': return '<div class="grid2">' + fRichText('Слева', p + 'label', { rows: 1 }) +
+          fRichText('Справа', p + 'value', { rows: 1 }) + '</div>' +
+        '<div class="sub">Текст</div>' +
+        '<div class="grid2">' + fNum('Размер, px', p + 'size', 6, 60, 1) + fSelect('Шрифт', p + 'font', FONTS) + '</div>' +
         '<div class="grid2">' + fColorOpt('Цвет слева', p + 'color') + fColorOpt('Цвет справа', p + 'vcolor') + '</div>' +
-        '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fRange('Размер', p + 'size', 8, 30, 1) + '</div>';
+        '<div class="grid2">' + fSelect('Жирн. слева', p + 'lweight', WEIGHTS) +
+          fSelect('Жирн. справа', p + 'weight', WEIGHTS) + '</div>' +
+        grpBox(p, { noShadow: true }) + grpGeom(p, i, { noH: true });
+      case 'box': return grpBox(p) + grpGeom(p, i);
+      case 'image': return fFile('Картинка', p + 'src') +
+        fSelect('Вписывание', p + 'fit', [{ v: 'cover', l: 'Заполнить' }, { v: 'contain', l: 'Вместить' },
+          { v: 'fill', l: 'Растянуть' }]) +
+        '<div class="grid2">' + fColorOpt('Цвет рамки', p + 'border', '#e7e9ef') +
+          fNum('Толщина рамки', p + 'bw', 0, 12, 1) + '</div>' +
+        '<div class="grid2">' + fNum('Скругление', p + 'radius', 0, 300, 1) + fCheck('Тень', p + 'shadow') + '</div>' +
+        grpGeom(p, i);
+      case 'line': return '<div class="grid2">' + fColorOpt('Цвет', p + 'color', '#eef0f3') +
+          fSelect('Стиль', p + 'style', LSTYLE) + '</div>' +
+        '<div class="grid2">' + fNum('Толщина', p + 'h', 1, 20, 1) + fNum('Длина', p + 'w', 4, 1600, 1) + '</div>' +
+        grpGeom(p, i, { noW: true, noH: true });
     }
     return '';
   }
+
   function customEditor() {
     var list = state.custom || [];
     var hint = '<div class="hint">'
@@ -444,8 +504,7 @@
         '<button class="btn xs ghost" data-act="dupCustom" data-i="' + i + '" title="Дублировать">⧉</button>' +
         '<button class="btn xs ghost" data-act="delCustom" data-i="' + i + '" title="Удалить">✕</button>' +
         '</span></div>' +
-        '<div class="grid2">' + fNum('X', p + 'x', -200, 1200, 1) + fNum('Y', p + 'y', -200, 2000, 1) + '</div>' +
-        customFields(c, p) + '</div>';
+        customFields(c, p, i) + '</div>';
     }).join('');
   }
 
@@ -682,6 +741,13 @@
       var i = Number(b.dataset.i), j = act === 'up' ? i - 1 : i + 1;
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    } else if (act === 'zFront' || act === 'zBack') {
+      var el0 = state.custom[Number(b.dataset.i)];
+      if (el0) {
+        var zs = state.custom.map(function (x) { return x.z == null ? 30 : x.z; });
+        el0.z = act === 'zFront' ? Math.max.apply(null, zs) + 1 : Math.min.apply(null, zs) - 1;
+        markChange(act === 'zFront' ? 'Слой: вперёд' : 'Слой: назад');
+      }
     } else if (act === 'stripRich') {
       var tmp = document.createElement('div');
       tmp.innerHTML = String(getPath(state, b.dataset.path) || '').replace(/<br\s*\/?>/gi, '\n');
@@ -834,7 +900,7 @@
     r.onload = function () {
       try {
         var cfg = JSON.parse(r.result);
-        state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg);
+        state = fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg));
         markChange('Импорт JSON'); rebuildForm(); renderPreview(); flash('Конфиг импортирован');
       } catch (err) { alert('Неверный JSON: ' + err.message); }
     };
@@ -858,7 +924,7 @@
     if (!raw) { flash('Резервной копии нет'); return; }
     if (!confirm('Восстановить шаблон из резервной копии?\n\nТекущий вид будет заменён.')) return;
     try {
-      state = window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw));
+      state = fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw)));
     } catch (e) { flash('Резервная копия повреждена'); return; }
     genQR().then(function () { rebuildForm(); renderPreview(); flash('Шаблон восстановлен'); });
   });
@@ -1399,7 +1465,7 @@
   /* ---- console / automation API --------------------------------------- */
   window.Builder = {
     get: function () { return clone(state); },
-    set: function (cfg) { markChange('Загружен конфиг'); state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg); return genQR().then(function () { rebuildForm(); renderPreview(); }); },
+    set: function (cfg) { markChange('Загружен конфиг'); state = fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg)); return genQR().then(function () { rebuildForm(); renderPreview(); }); },
     patch: function (path, val) {
       markChange('Правка: ' + pathLabel(path), path);
       setPath(state, path, val);
