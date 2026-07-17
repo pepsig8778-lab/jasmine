@@ -161,6 +161,45 @@
       .replace(/"/g, '&quot;');
   }
 
+  /* ----------------------------------------------------------------------- */
+  /* Rich text: allow per-selection formatting (bold / size / colour ...)     */
+  /* but sanitise hard — configs get imported and rendered server-side.       */
+  /* ----------------------------------------------------------------------- */
+  var RICH_TAGS = { SPAN: 1, B: 1, STRONG: 1, I: 1, EM: 1, U: 1, S: 1, BR: 1, DIV: 1, P: 1 };
+  var RICH_CSS = ['font-weight', 'font-style', 'font-size', 'color', 'background-color',
+                  'text-decoration', 'text-decoration-line'];
+  var RICH_RE = /<(b|strong|i|em|u|s|br|div|p|span)\b/i;
+  var DROP_TAGS = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, LINK: 1, META: 1, SVG: 1 };
+
+  function sanitizeRich(html) {
+    var s = String(html == null ? '' : html);
+    if (!RICH_RE.test(s)) return esc(s);          // plain text (incl. "a < b") -> escape
+    if (typeof document === 'undefined') return esc(s);
+    var root = document.createElement('div');
+    root.innerHTML = s;
+    (function walk(node) {
+      Array.prototype.slice.call(node.childNodes).forEach(function (n) {
+        if (n.nodeType === 3) return;                       // text node: keep
+        if (n.nodeType !== 1) { n.parentNode.removeChild(n); return; }
+        if (DROP_TAGS[n.tagName]) { n.parentNode.removeChild(n); return; }  // drop w/ content
+        if (!RICH_TAGS[n.tagName]) {                        // unknown tag: unwrap, keep text
+          while (n.firstChild) node.insertBefore(n.firstChild, n);
+          n.parentNode.removeChild(n); return;
+        }
+        var style = n.getAttribute('style') || '';
+        Array.prototype.slice.call(n.attributes).forEach(function (a) { n.removeAttribute(a.name); });
+        var keep = style.split(';').map(function (x) { return x.trim(); }).filter(function (dcl) {
+          var k = (dcl.split(':')[0] || '').trim().toLowerCase();
+          return RICH_CSS.indexOf(k) >= 0 && !/url\(|expression|javascript:|@import/i.test(dcl);
+        });
+        if (keep.length) n.setAttribute('style', keep.join(';'));
+        walk(n);
+      });
+    })(root);
+    return root.innerHTML;
+  }
+  var rich = sanitizeRich;
+
   function isPlainObject(v) {
     return v && typeof v === 'object' && !Array.isArray(v);
   }
@@ -262,8 +301,8 @@
       var info = r.info
         ? '<span class="sc-row-info">' + ICONS.info + '</span>' : '';
       return '<div class="sc-row">' +
-        '<span class="sc-row-label"><span data-edit="summary.rows.' + i + '.label">' + esc(r.label) + '</span>' + info + '</span>' +
-        '<span class="sc-row-value' + (r.muted ? ' muted' : '') + '" data-edit="summary.rows.' + i + '.value">' + esc(r.value) + '</span>' +
+        '<span class="sc-row-label"><span data-edit="summary.rows.' + i + '.label">' + rich(r.label) + '</span>' + info + '</span>' +
+        '<span class="sc-row-value' + (r.muted ? ' muted' : '') + '" data-edit="summary.rows.' + i + '.value">' + rich(r.value) + '</span>' +
         '</div>';
     }).join('');
 
@@ -273,13 +312,13 @@
         ? ' <span class="sc-info-link">' + esc(s.infoBox.link) + '</span>' : '';
       info = '<div class="sc-info">' +
         '<span class="sc-info-ico">' + ICONS.info + '</span>' +
-        '<div class="sc-info-txt"><span data-edit="summary.infoBox.text">' + esc(s.infoBox.text) + '</span>' + link + '</div>' +
+        '<div class="sc-info-txt"><span data-edit="summary.infoBox.text">' + rich(s.infoBox.text) + '</span>' + link + '</div>' +
         '</div>';
     }
 
     var total = s.total ? '<div class="sc-divider"></div>' +
-      '<div class="sc-total"><span class="l" data-edit="summary.total.label">' + esc(s.total.label) + '</span>' +
-      '<span class="v" data-edit="summary.total.value">' + esc(s.total.value) + '</span></div>' : '';
+      '<div class="sc-total"><span class="l" data-edit="summary.total.label">' + rich(s.total.label) + '</span>' +
+      '<span class="v" data-edit="summary.total.value">' + rich(s.total.value) + '</span></div>' : '';
 
     var img = s.product && s.product.image
       ? '<img class="sc-product-img" src="' + esc(s.product.image) + '" alt=""/>'
@@ -289,10 +328,10 @@
       ? qrImg(qr, 'sc-qr-inprod') : '';
 
     return '' +
-      (s.title ? '<div class="sc-section-title" data-edit="summary.title">' + esc(s.title) + '</div>' : '') +
+      (s.title ? '<div class="sc-section-title" data-edit="summary.title">' + rich(s.title) + '</div>' : '') +
       '<div class="sc-card">' +
         '<div class="sc-product">' + img +
-          '<div class="sc-product-title" data-edit="summary.product.title">' + esc(s.product ? s.product.title : '') + '</div>' +
+          '<div class="sc-product-title" data-edit="summary.product.title">' + rich(s.product ? s.product.title : '') + '</div>' +
           prodQR +
         '</div>' +
         '<div class="sc-divider"></div>' +
@@ -307,7 +346,7 @@
     var filled = d.value ? ' filled' : '';
     var text = d.value ? esc(d.value) : esc(d.placeholder);
     return '' +
-      (d.title ? '<div class="sc-section-title mt" data-edit="discount.title">' + esc(d.title) + '</div>' : '') +
+      (d.title ? '<div class="sc-section-title mt" data-edit="discount.title">' + rich(d.title) + '</div>' : '') +
       '<div class="sc-discount' + filled + '" data-edit="discount.' + (d.value ? 'value' : 'placeholder') + '">' + text + '</div>';
   }
 
@@ -315,15 +354,15 @@
     var badge = opt.badge
       ? '<span class="sc-opt-badge">' + esc(opt.badge) + '</span>' : '';
     var btn = opt.button
-      ? '<div class="sc-opt-btn">' + esc(opt.button) + '</div>' : '';
+      ? '<div class="sc-opt-btn">' + rich(opt.button) + '</div>' : '';
     var carrier = opt.carrier
       ? '<div class="sc-carrier">' + posteLogo(opt, theme) +
         '<span class="sc-carrier-txt">' + esc(opt.carrier) + '</span></div>' : '';
     return '<div class="sc-opt' + (opt.selected ? ' selected' : '') + '">' +
       badge +
       '<div class="sc-opt-row">' +
-        '<span class="sc-opt-title">' + esc(opt.title) + '</span>' +
-        '<span class="sc-opt-price">' + esc(opt.price) + '</span>' +
+        '<span class="sc-opt-title">' + rich(opt.title) + '</span>' +
+        '<span class="sc-opt-price">' + rich(opt.price) + '</span>' +
       '</div>' +
       btn + carrier +
       '</div>';
@@ -335,7 +374,7 @@
     return '<div class="sc-card" style="margin-top:15px">' +
         '<div class="sc-ship-head">' +
           '<span class="sc-ship-ico">' + ICONS.truck + '</span>' +
-          '<span class="sc-ship-head-title" data-edit="shipping.title">' + esc(sh.title) + '</span>' +
+          '<span class="sc-ship-head-title" data-edit="shipping.title">' + rich(sh.title) + '</span>' +
         '</div>' + opts +
       '</div>';
   }
@@ -398,24 +437,24 @@
         return '<div' + A + 'left:' + c.x + 'px;top:' + c.y + 'px;z-index:' + c.z +
           ';background:' + (c.bg || 'var(--badge-bg)') + ';color:' + (c.color || 'var(--badge-text)') +
           ';border-radius:' + c.radius + 'px;font-size:' + c.size + 'px;padding:3px 7px;">' +
-          esc(c.text) + '</div>';
+          rich(c.text) + '</div>';
       }
       if (c.type === 'info') {
         return '<div' + A + box + 'background:' + (c.bg || 'var(--info-bg)') + ';color:' +
           (c.color || 'var(--info-text)') + ';border-radius:' + c.radius + 'px;padding:10px 12px;font-size:' +
           c.size + 'px;line-height:1.42;"><span class="ico">' + ICONS.info + '</span><span class="txt">' +
-          esc(c.text) + '</span></div>';
+          rich(c.text) + '</span></div>';
       }
       if (c.type === 'row') {
-        return '<div' + A + box + 'font-size:' + c.size + 'px;"><span style="color:' +
-          (c.color || 'var(--text)') + '">' + esc(c.label) + '</span><span style="color:' +
-          (c.vcolor || 'var(--text)') + ';font-weight:' + c.weight + '">' + esc(c.value) + '</span></div>';
+        return '<div' + A + box + 'font-size:' + c.size + 'px;"><span data-part="label" style="color:' +
+          (c.color || 'var(--text)') + '">' + rich(c.label) + '</span><span data-part="value" style="color:' +
+          (c.vcolor || 'var(--text)') + ';font-weight:' + c.weight + '">' + rich(c.value) + '</span></div>';
       }
       // text
       return '<div' + A + box + 'font-size:' + c.size + 'px;font-weight:' + c.weight + ';color:' +
         (c.color || 'var(--text)') + ';text-align:' + c.align + ';line-height:1.3;' +
         (c.bg ? 'background:' + c.bg + ';' : '') + (c.pad ? 'padding:' + c.pad + 'px;' : '') +
-        (c.radius ? 'border-radius:' + c.radius + 'px;' : '') + '">' + esc(c.text) + '</div>';
+        (c.radius ? 'border-radius:' + c.radius + 'px;' : '') + '">' + rich(c.text) + '</div>';
     }).join('');
   }
 
@@ -424,7 +463,7 @@
     if (h.show === false) return '';
     return '<div class="sc-header">' +
       (h.showClose === false ? '' : '<span class="sc-close">' + ICONS.close + '</span>') +
-      '<span class="sc-title" data-edit="header.title">' + esc(h.title) + '</span>' +
+      '<span class="sc-title" data-edit="header.title">' + rich(h.title) + '</span>' +
       '</div><div class="sc-header-line"></div>';
   }
 
@@ -488,6 +527,7 @@
     return renderScreen(el, cfg);
   }
 
+  root.sanitizeRich = sanitizeRich;
   root.CUSTOM_DEFAULTS = CUSTOM_DEFAULTS;
   root.SCREEN_CSS = SCREEN_CSS;
   root.renderScreenHTML = renderScreenHTML;

@@ -209,6 +209,18 @@
     return '<label class="fld"><span class="fld-l">' + esc(label) + '</span>' +
       '<select data-path="' + path + '" data-select="1">' + opts + '</select></label>';
   }
+  /* A formatted text must NOT be shown as raw HTML in a textarea. */
+  function hasRich(v) { return /<(b|strong|i|em|u|s|span)\b/i.test(String(v || '')); }
+  function fRichText(label, path, opts) {
+    var v = String(getPath(state, path) == null ? '' : getPath(state, path));
+    if (!hasRich(v)) return fText(label, path, opts);
+    return '<div class="fld"><span class="fld-l">' + esc(label) + '</span>' +
+      '<div class="rich-note">✨ Текст с форматированием — правьте <b>двойным кликом на шаблоне</b>' +
+      '<div class="rich-prev">' + window.sanitizeRich(v) + '</div>' +
+      '<button class="btn xs ghost" data-act="stripRich" data-path="' + path + '">Убрать форматирование</button>' +
+      '</div></div>';
+  }
+
   /* optional colour: empty = inherit from theme (no misleading black swatch) */
   function fColorOpt(label, path, fallback) {
     var v = getPath(state, path);
@@ -382,7 +394,7 @@
   function customFields(c, p) {
     var ALIGN = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
     switch (c.type) {
-      case 'text': return fText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 5 }) +
+      case 'text': return fRichText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 5 }) +
         '<div class="grid2">' + fRange('Размер', p + 'size', 8, 48, 1) + fRange('Жирность', p + 'weight', 300, 900, 100) + '</div>' +
         '<div class="grid2">' + fColorOpt('Цвет', p + 'color') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
         '<div class="grid2">' + fSelect('Выравнивание', p + 'align', ALIGN) + fNum('Ширина', p + 'w', 20, 900, 1) + '</div>' +
@@ -396,17 +408,17 @@
           fSelect('Вписывание', p + 'fit', [{ v: 'cover', l: 'Заполнить' }, { v: 'contain', l: 'Вместить' }]) + '</div>';
       case 'line': return '<div class="grid2">' + fNum('Длина', p + 'w', 10, 900, 1) + fNum('Толщина', p + 'h', 1, 12, 1) + '</div>' +
         fColorOpt('Цвет', p + 'color', '#eef0f3');
-      case 'btn': return fText('Текст', p + 'text') +
+      case 'btn': return fRichText('Текст', p + 'text') +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fNum('Высота', p + 'h', 20, 80, 1) + '</div>' +
         '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
         '<div class="grid2">' + fColorOpt('Рамка', p + 'border', '#dfe3ed') + fNum('Скругление', p + 'radius', 0, 40, 1) + '</div>';
-      case 'badge': return fText('Текст', p + 'text') +
+      case 'badge': return fRichText('Текст', p + 'text') +
         '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#feeceb') + '</div>' +
         '<div class="grid2">' + fRange('Размер', p + 'size', 7, 20, 1) + fNum('Скругление', p + 'radius', 0, 20, 1) + '</div>';
-      case 'info': return fText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 4 }) +
+      case 'info': return fRichText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 4 }) +
         '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#e9edff') + fColorOpt('Текст', p + 'color', '#26316d') + '</div>' +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 60, 900, 1) + fRange('Размер', p + 'size', 8, 20, 1) + '</div>';
-      case 'row': return '<div class="grid2">' + fText('Слева', p + 'label') + fText('Справа', p + 'value') + '</div>' +
+      case 'row': return '<div class="grid2">' + fRichText('Слева', p + 'label') + fRichText('Справа', p + 'value') + '</div>' +
         '<div class="grid2">' + fColorOpt('Цвет слева', p + 'color') + fColorOpt('Цвет справа', p + 'vcolor') + '</div>' +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fRange('Размер', p + 'size', 8, 30, 1) + '</div>';
     }
@@ -662,6 +674,11 @@
       var i = Number(b.dataset.i), j = act === 'up' ? i - 1 : i + 1;
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    } else if (act === 'stripRich') {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = String(getPath(state, b.dataset.path) || '').replace(/<br\s*\/?>/gi, '\n');
+      setPath(state, b.dataset.path, tmp.textContent || '');
+      markChange('Убрано форматирование');
     } else if (act === 'optColor') {
       var cur = getPath(state, b.dataset.path);
       setPath(state, b.dataset.path, cur ? '' : (b.dataset.fb || '#3c4858'));
@@ -1117,13 +1134,66 @@
   var editing = null;
   var TEXT_FIELD = { text: 'text', badge: 'text', btn: 'text', info: 'text' };
 
+  /* ---- format the SELECTED part of the text (bold / size / colour) ------ */
+  var fmtBar = document.getElementById('fmtBar');
+  function hideFmtBar() { fmtBar.style.display = 'none'; }
+  function showFmtBarForSelection() {
+    if (!editing) return hideFmtBar();
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return hideFmtBar();
+    var r = sel.getRangeAt(0).getBoundingClientRect();
+    if (!r.width && !r.height) return hideFmtBar();
+    fmtBar.style.display = 'flex';
+    fmtBar.style.left = (r.left + r.width / 2) + 'px';
+    fmtBar.style.top = (r.top - 8) + 'px';
+  }
+  document.addEventListener('selectionchange', function () {
+    if (editing) showFmtBarForSelection();
+  });
+  /* wrap the current selection in a styled <span> */
+  function styleSelection(css) {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+    var range = sel.getRangeAt(0);
+    var span = document.createElement('span');
+    Object.keys(css).forEach(function (k) { span.style[k] = css[k]; });
+    try { range.surroundContents(span); }
+    catch (e) { span.appendChild(range.extractContents()); range.insertNode(span); }
+    // keep the same text selected so you can chain B -> bigger -> colour
+    var nr = document.createRange(); nr.selectNodeContents(span);
+    sel.removeAllRanges(); sel.addRange(nr);
+    showFmtBarForSelection();
+  }
+  function selectionFontSize() {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return 14;
+    var n = sel.getRangeAt(0).startContainer;
+    if (n.nodeType === 3) n = n.parentNode;
+    return parseFloat(window.getComputedStyle(n).fontSize) || 14;
+  }
+  fmtBar.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep the selection
+  fmtBar.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
+    var f = b.dataset.fmt;
+    try { document.execCommand('styleWithCSS', false, true); } catch (err) {}
+    if (f === 'bold' || f === 'italic' || f === 'underline') document.execCommand(f, false, null);
+    else if (f === 'clear') document.execCommand('removeFormat', false, null);
+    else if (f === 'bigger') styleSelection({ fontSize: Math.min(72, Math.round(selectionFontSize() * 1.2)) + 'px' });
+    else if (f === 'smaller') styleSelection({ fontSize: Math.max(6, Math.round(selectionFontSize() / 1.2)) + 'px' });
+  });
+  document.getElementById('fmtColor').addEventListener('input', function () {
+    if (editing) styleSelection({ color: this.value });
+  });
+
   function customById(id) {
     return (state.custom || []).filter(function (c) { return c.id === id; })[0];
   }
-  function startInlineEdit(el, apply, initial, multiline) {
+  /* Rich inline editor: type freely, Enter = new line, select any part ->
+     the format bar lets you make just that part bold / bigger / coloured. */
+  function startInlineEdit(el, apply, initial) {
     if (editing) return;
     editing = true;
-    el.setAttribute('contenteditable', 'plaintext-only');
+    el.setAttribute('contenteditable', 'true');
     el.classList.add('inline-edit');
     el.focus();
     try {
@@ -1132,17 +1202,20 @@
     } catch (e) {}
     function finish(commit) {
       if (!editing) return;
-      editing = null;
-      var txt = el.innerText.replace(/ /g, ' ').replace(/\n$/, '');
+      editing = null; hideFmtBar();
+      var html = window.sanitizeRich(el.innerHTML)
+        .replace(/<div><br><\/div>/gi, '<br>')
+        .replace(/<div>/gi, '<br>').replace(/<\/div>/gi, '')
+        .replace(/^(?:<br>)+/i, '').replace(/(?:<br>)+$/i, '');
       el.removeAttribute('contenteditable'); el.classList.remove('inline-edit');
-      if (commit && txt !== initial) { markChange('Правка текста на шаблоне'); apply(txt); }
+      if (commit && html !== initial) { markChange('Правка текста на шаблоне'); apply(html); }
       rebuildForm(); renderPreview();
     }
     el.addEventListener('blur', function () { finish(true); }, { once: true });
     el.addEventListener('keydown', function (ev) {
       ev.stopPropagation();                       // don't trigger Del/undo shortcuts
-      if (ev.key === 'Escape') { ev.preventDefault(); editing = null; el.blur(); rebuildForm(); renderPreview(); }
-      if (ev.key === 'Enter' && !multiline) { ev.preventDefault(); el.blur(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); editing = null; hideFmtBar(); el.blur(); rebuildForm(); renderPreview(); }
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); el.blur(); }
     });
   }
   preview.addEventListener('dblclick', function (e) {
@@ -1154,18 +1227,17 @@
       if (c.type === 'row') {                      // edit the half you clicked
         var part = e.target.closest('[data-part]');
         var f = part ? part.dataset.part : 'label';
-        return startInlineEdit(part || cu, function (t) { c[f] = t; }, c[f], false);
+        return startInlineEdit(part || cu, function (t) { c[f] = t; }, c[f]);
       }
       var fld = TEXT_FIELD[c.type];
       if (!fld) return;
-      return startInlineEdit(cu, function (t) { c[fld] = t; }, c[fld], c.type === 'text' || c.type === 'info');
+      return startInlineEdit(cu, function (t) { c[fld] = t; }, c[fld]);
     }
     var ed = e.target.closest && e.target.closest('[data-edit]');
     if (ed) {
       var path = ed.dataset.edit;
       startInlineEdit(ed, function (t) { setPath(state, path, t); },
-        String(getPath(state, path) == null ? '' : getPath(state, path)),
-        /infoBox|product\.title/.test(path));
+        String(getPath(state, path) == null ? '' : getPath(state, path)));
     }
   });
 

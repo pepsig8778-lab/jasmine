@@ -136,6 +136,11 @@
     border-radius:6px;padding:6px 8px;font-size:12px;font-family:ui-monospace,monospace;}
   .theme-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;}
   .opt-auto{font-size:11px;color:var(--ink-dim);align-self:center;}
+  .rich-note{background:var(--field);border:1px solid #2f6b46;border-radius:8px;padding:8px 9px;
+    font-size:11px;color:var(--ink-dim);line-height:1.5;}
+  .rich-note b{color:#9fe0b5;}
+  .rich-prev{background:#fff;color:#111;border-radius:6px;padding:6px 8px;margin:6px 0;
+    font-size:12px;max-height:90px;overflow:auto;white-space:pre-wrap;}
 
   .file .file-row{display:flex;align-items:center;gap:10px;}
   .thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--field);
@@ -219,6 +224,18 @@
     cursor:text;border-radius:3px;}
   #preview .inline-edit{outline:2px solid #22c55e !important;background:rgba(34,197,94,.12);
     cursor:text !important;border-radius:3px;}
+  /* text-selection format bar (bold / size / colour of the SELECTED part) */
+  .fmt-bar{position:fixed;transform:translate(-50%,-100%);z-index:340;display:flex;
+    align-items:center;gap:1px;background:#0d1424;border:1px solid #22c55e;border-radius:9px;
+    padding:3px;box-shadow:0 10px 28px rgba(0,0,0,.6);}
+  .fmt-bar button{background:transparent;border:0;color:var(--ink);font-family:inherit;
+    font-size:12.5px;min-width:28px;height:26px;padding:0 6px;border-radius:6px;cursor:pointer;}
+  .fmt-bar button:hover{background:#22c55e;color:#062;}
+  .fmt-bar .fs{width:1px;height:16px;background:var(--line);margin:0 3px;}
+  .fmt-color{display:flex;align-items:center;justify-content:center;width:28px;height:26px;
+    border-radius:6px;cursor:pointer;font-size:12px;position:relative;}
+  .fmt-color:hover{background:#22c55e;}
+  .fmt-color input{position:absolute;inset:0;opacity:0;cursor:pointer;}
   /* floating toolbar over the selected element */
   .sel-bar{position:fixed;transform:translate(-50%,-100%);z-index:320;display:flex;gap:2px;
     background:#11182a;border:1px solid var(--accent-2);border-radius:9px;padding:3px;
@@ -399,6 +416,17 @@
   </div>
 
   <div class="place-hint" id="placeHint"></div>
+  <div class="fmt-bar" id="fmtBar" style="display:none">
+    <button data-fmt="bold" title="Жирный (Ctrl+B)"><b>B</b></button>
+    <button data-fmt="italic" title="Курсив (Ctrl+I)"><i>I</i></button>
+    <button data-fmt="underline" title="Подчёркнутый (Ctrl+U)"><u>U</u></button>
+    <span class="fs"></span>
+    <button data-fmt="smaller" title="Мельче">A−</button>
+    <button data-fmt="bigger" title="Крупнее">A+</button>
+    <span class="fs"></span>
+    <label class="fmt-color" title="Цвет выделенного">🎨<input type="color" id="fmtColor" value="#f9423a"></label>
+    <button data-fmt="clear" title="Убрать форматирование">✕</button>
+  </div>
   <div class="sel-bar" id="selBar" style="display:none">
     <button data-sb="edit" title="Редактировать текст">✎ Текст</button>
     <button data-sb="dup" title="Дублировать">⧉</button>
