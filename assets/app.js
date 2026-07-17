@@ -318,7 +318,11 @@
         }).join('') + '</div></div>' +
       qrPills('Форма модулей', 'qr.moduleShape', [['square', 'Квадраты'], ['dots', 'Точки'], ['rounded', 'Скругл.'], ['diamond', 'Ромбы']]) +
       qrPills('Форма «глаз»', 'qr.eyeShape', [['square', 'Квадрат'], ['rounded', 'Скругл.'], ['circle', 'Круг']]) +
-      '<div class="grid2">' + fColor('Цвет модулей', 'qr.dark') + fColor('Фон', 'qr.light') + '</div>' +
+      '<div class="grid2">' + fColor('Цвет модулей', 'qr.dark') +
+        (q.transparentBg ? '<div class="fld"><span class="fld-l">Фон QR</span>' +
+            '<div class="hint" style="padding:7px 0 0">прозрачный — виден фон карточки</div></div>'
+          : fColor('Фон QR', 'qr.light')) + '</div>' +
+      fCheck('Прозрачный фон QR (наследует тему)', 'qr.transparentBg') +
       '<div class="grid2">' + fColor('Цвет «глаз»', 'qr.eyeColor') +
         fSelect('Градиент', 'qr.gradient', [{ v: 'none', l: 'Нет' }, { v: 'linear', l: 'Линейный' }, { v: 'radial', l: 'Радиальный' }]) + '</div>' +
       (q.gradient && q.gradient !== 'none'

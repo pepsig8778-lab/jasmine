@@ -136,7 +136,8 @@ window.DEFAULT_CONFIG = {
     "margin": 4,
     "radius": 0,
     "logo": "",
-    "logoScale": 0.22
+    "logoScale": 0.22,
+    "transparentBg": false
   },
   "layout": {
     "order": [

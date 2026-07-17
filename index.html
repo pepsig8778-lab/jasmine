@@ -60,7 +60,8 @@
     width:100%;justify-content:center;padding-bottom:4px;border-bottom:1px solid var(--line);}
   .parser-canvas-scroll{flex:1;display:flex;align-items:flex-start;justify-content:center;
     width:100%;overflow:auto;padding:8px;}
-  #parserPreview{transform-origin:top center;background:#fff;border-radius:3px;
+  /* NB: no background here — .screen paints it from --page-bg (theme) */
+  #parserPreview{transform-origin:top center;border-radius:3px;
     box-shadow:0 12px 34px rgba(0,0,0,.45);}
   .parser-placeholder{color:var(--ink-dim);font-size:13px;text-align:center;margin:auto;
     max-width:280px;line-height:1.6;}
@@ -207,7 +208,8 @@
   .canvas-scroll{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;
     padding:34px;}
   #canvasWrap{position:relative;flex:0 0 auto;}
-  #preview{transform-origin:top left;background:#fff;border-radius:2px;
+  /* NB: no background here — .screen paints it from --page-bg (theme) */
+  #preview{transform-origin:top left;border-radius:2px;
     box-shadow:0 12px 34px rgba(0,0,0,.45);}
 
   .flash{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);

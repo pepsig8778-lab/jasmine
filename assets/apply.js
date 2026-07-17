@@ -30,7 +30,9 @@
     return {
       data: q.data, ecl: q.ecl || 'M', scale: 8,
       moduleShape: q.moduleShape || 'square', eyeShape: q.eyeShape || 'square',
-      dark: q.dark || '#000000', light: q.light || '#ffffff',
+      dark: q.dark || '#000000',
+      // transparent -> the QR sits directly on the themed card (no white slab)
+      light: q.transparentBg ? 'transparent' : (q.light || '#ffffff'),
       eyeColor: q.eyeColor || '', margin: q.margin == null ? 4 : q.margin,
       gradient: q.gradient || 'none', gradientColor: q.gradientColor || q.dark,
       gradientAngle: q.gradientAngle == null ? 45 : q.gradientAngle,
