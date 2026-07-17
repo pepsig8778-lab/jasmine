@@ -1330,8 +1330,14 @@
     });
   }
   // keep the selection when clicking the bar (but let the colour picker open)
+  // Opening the native colour picker moves DOM focus away from the editable
+  // element, which would otherwise look like "user is done editing" and end
+  // the edit session before a colour is even picked. This flag tells the
+  // blur/focusout handlers to stay put while the picker is up.
+  var pickingColor = false;
   fmtBar.addEventListener('mousedown', function (e) {
-    if (!e.target.closest('.fmt-color')) e.preventDefault();
+    if (e.target.closest('.fmt-color')) pickingColor = true;
+    else e.preventDefault();
   });
   fmtBar.addEventListener('click', function (e) {
     var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
@@ -1358,6 +1364,11 @@
   }
   fmtColorEl.addEventListener('input', applyColour);
   fmtColorEl.addEventListener('change', applyColour);
+  // Picker closed (colour chosen or cancelled) — hand focus back to the editor.
+  fmtColorEl.addEventListener('blur', function () {
+    pickingColor = false;
+    if (editing) editing.focus();
+  });
 
   /* Rich inline editor: type freely, Enter = new line, select any part ->
      the format bar lets you make just that part bold / bigger / coloured. */
@@ -1382,6 +1393,7 @@
     if (caretEnd) caretToEnd(el);
     setTimeout(showFmtBarForSelection, 0);
     function finish(commit) {
+      el.removeEventListener('blur', onBlur);
       if (!editing) return;
       editing = null; hideFmtBar();
       var html = normalizeRich(el.innerHTML);
@@ -1389,10 +1401,14 @@
       if (commit && html !== initial) { markChange('Правка текста на шаблоне'); apply(html); }
       rebuildForm(); renderPreview();
     }
-    el.addEventListener('blur', function () { finish(true); }, { once: true });
+    function onBlur() {
+      if (pickingColor) return;                  // colour picker stole focus — keep editing
+      finish(true);
+    }
+    el.addEventListener('blur', onBlur);
     el.addEventListener('keydown', function (ev) {
       ev.stopPropagation();                       // don't trigger Del/undo shortcuts
-      if (ev.key === 'Escape') { ev.preventDefault(); editing = null; hideFmtBar(); el.blur(); rebuildForm(); renderPreview(); }
+      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); el.blur(); }
       if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); el.blur(); }
     });
   }
@@ -1426,6 +1442,7 @@
   });
   controls.addEventListener('focusout', function (e) {
     if (e.target.dataset && e.target.dataset.rich) setTimeout(function () {
+      if (pickingColor) return;                  // colour picker stole focus — keep editing
       if (editing === e.target) { editing = null; hideFmtBar(); }
     }, 150);
   });
