@@ -135,6 +135,7 @@
   .color .hex{flex:1;background:var(--field);border:1px solid var(--field-line);color:var(--ink);
     border-radius:6px;padding:6px 8px;font-size:12px;font-family:ui-monospace,monospace;}
   .theme-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;}
+  .opt-auto{font-size:11px;color:var(--ink-dim);align-self:center;}
 
   .file .file-row{display:flex;align-items:center;gap:10px;}
   .thumb{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--field);
@@ -213,6 +214,18 @@
   /* selected custom element */
   #preview [data-custom]:hover{outline:1.5px dashed rgba(79,124,255,.7);outline-offset:1px;cursor:move;}
   #preview [data-custom].sel{outline:2px solid var(--accent-2);outline-offset:1px;}
+  /* inline editing (double-click any text on the template) */
+  #preview [data-edit]:hover{outline:1.5px dashed rgba(34,197,94,.85);outline-offset:2px;
+    cursor:text;border-radius:3px;}
+  #preview .inline-edit{outline:2px solid #22c55e !important;background:rgba(34,197,94,.12);
+    cursor:text !important;border-radius:3px;}
+  /* floating toolbar over the selected element */
+  .sel-bar{position:fixed;transform:translate(-50%,-100%);z-index:320;display:flex;gap:2px;
+    background:#11182a;border:1px solid var(--accent-2);border-radius:9px;padding:3px;
+    box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  .sel-bar button{background:transparent;border:0;color:var(--ink);font-family:inherit;
+    font-size:11.5px;padding:5px 8px;border-radius:6px;cursor:pointer;white-space:nowrap;}
+  .sel-bar button:hover{background:var(--accent-2);color:#fff;}
   /* ---------------- history journal ---------------- */
   .hist-wrap{position:relative;}
   .hist-menu{position:absolute;top:calc(100% + 8px);left:0;width:300px;max-height:360px;
@@ -259,7 +272,7 @@
       <aside class="panel">
         <div class="panel-head">
           <h1>Конструктор шаблона</h1>
-          <p>Меняйте текст, фото, цены, разделы, QR и цвета</p>
+          <p>💡 <b style="color:#9fe0b5">Двойной клик по любому тексту на шаблоне</b> — правка прямо там</p>
         </div>
         <div id="controls"><!-- generated --></div>
         <div class="panel-foot">
@@ -279,7 +292,7 @@
           <div class="grp add-wrap">
             <button class="btn sm primary" id="addBtn">＋ Добавить на шаблон</button>
             <div class="add-menu" id="addMenu">
-              <div class="hh">Выберите элемент, затем кликните по шаблону</div>
+              <div class="hh">1) выберите элемент → 2) кликните по шаблону в нужном месте<br>потом: двойной клик = править текст, тянуть = двигать</div>
               <div class="add-grid">
                 <button class="add-it" data-add="text"><b>📝</b>Текст</button>
                 <button class="add-it" data-add="box"><b>▭</b>Блок / карточка</button>
@@ -386,6 +399,11 @@
   </div>
 
   <div class="place-hint" id="placeHint"></div>
+  <div class="sel-bar" id="selBar" style="display:none">
+    <button data-sb="edit" title="Редактировать текст">✎ Текст</button>
+    <button data-sb="dup" title="Дублировать">⧉</button>
+    <button data-sb="del" title="Удалить (Del)">🗑</button>
+  </div>
   <div class="flash" id="flash"></div>
 
   <script src="assets/config.js"></script>

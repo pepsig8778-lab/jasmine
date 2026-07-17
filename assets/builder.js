@@ -255,12 +255,12 @@
   /* Section builders                                                         */
   /* ----------------------------------------------------------------------- */
   function buildSummary(s, qr) {
-    var rows = (s.rows || []).map(function (r) {
+    var rows = (s.rows || []).map(function (r, i) {
       var info = r.info
         ? '<span class="sc-row-info">' + ICONS.info + '</span>' : '';
       return '<div class="sc-row">' +
-        '<span class="sc-row-label">' + esc(r.label) + info + '</span>' +
-        '<span class="sc-row-value' + (r.muted ? ' muted' : '') + '">' + esc(r.value) + '</span>' +
+        '<span class="sc-row-label"><span data-edit="summary.rows.' + i + '.label">' + esc(r.label) + '</span>' + info + '</span>' +
+        '<span class="sc-row-value' + (r.muted ? ' muted' : '') + '" data-edit="summary.rows.' + i + '.value">' + esc(r.value) + '</span>' +
         '</div>';
     }).join('');
 
@@ -270,13 +270,13 @@
         ? ' <span class="sc-info-link">' + esc(s.infoBox.link) + '</span>' : '';
       info = '<div class="sc-info">' +
         '<span class="sc-info-ico">' + ICONS.info + '</span>' +
-        '<div class="sc-info-txt">' + esc(s.infoBox.text) + link + '</div>' +
+        '<div class="sc-info-txt"><span data-edit="summary.infoBox.text">' + esc(s.infoBox.text) + '</span>' + link + '</div>' +
         '</div>';
     }
 
     var total = s.total ? '<div class="sc-divider"></div>' +
-      '<div class="sc-total"><span class="l">' + esc(s.total.label) + '</span>' +
-      '<span class="v">' + esc(s.total.value) + '</span></div>' : '';
+      '<div class="sc-total"><span class="l" data-edit="summary.total.label">' + esc(s.total.label) + '</span>' +
+      '<span class="v" data-edit="summary.total.value">' + esc(s.total.value) + '</span></div>' : '';
 
     var img = s.product && s.product.image
       ? '<img class="sc-product-img" src="' + esc(s.product.image) + '" alt=""/>'
@@ -286,10 +286,10 @@
       ? qrImg(qr, 'sc-qr-inprod') : '';
 
     return '' +
-      (s.title ? '<div class="sc-section-title">' + esc(s.title) + '</div>' : '') +
+      (s.title ? '<div class="sc-section-title" data-edit="summary.title">' + esc(s.title) + '</div>' : '') +
       '<div class="sc-card">' +
         '<div class="sc-product">' + img +
-          '<div class="sc-product-title">' + esc(s.product ? s.product.title : '') + '</div>' +
+          '<div class="sc-product-title" data-edit="summary.product.title">' + esc(s.product ? s.product.title : '') + '</div>' +
           prodQR +
         '</div>' +
         '<div class="sc-divider"></div>' +
@@ -304,8 +304,8 @@
     var filled = d.value ? ' filled' : '';
     var text = d.value ? esc(d.value) : esc(d.placeholder);
     return '' +
-      (d.title ? '<div class="sc-section-title mt">' + esc(d.title) + '</div>' : '') +
-      '<div class="sc-discount' + filled + '">' + text + '</div>';
+      (d.title ? '<div class="sc-section-title mt" data-edit="discount.title">' + esc(d.title) + '</div>' : '') +
+      '<div class="sc-discount' + filled + '" data-edit="discount.' + (d.value ? 'value' : 'placeholder') + '">' + text + '</div>';
   }
 
   function buildOption(opt, theme) {
@@ -332,7 +332,7 @@
     return '<div class="sc-card" style="margin-top:15px">' +
         '<div class="sc-ship-head">' +
           '<span class="sc-ship-ico">' + ICONS.truck + '</span>' +
-          '<span class="sc-ship-head-title">' + esc(sh.title) + '</span>' +
+          '<span class="sc-ship-head-title" data-edit="shipping.title">' + esc(sh.title) + '</span>' +
         '</div>' + opts +
       '</div>';
   }
@@ -421,7 +421,7 @@
     if (h.show === false) return '';
     return '<div class="sc-header">' +
       (h.showClose === false ? '' : '<span class="sc-close">' + ICONS.close + '</span>') +
-      '<span class="sc-title">' + esc(h.title) + '</span>' +
+      '<span class="sc-title" data-edit="header.title">' + esc(h.title) + '</span>' +
       '</div><div class="sc-header-line"></div>';
   }
 

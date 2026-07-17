@@ -152,6 +152,7 @@
       var se = preview.querySelector('[data-custom="' + selId + '"]');
       if (se) se.classList.add('sel');
     }
+    positionSelBar();
     updateFitWarn();
     persist();
   }
@@ -207,6 +208,20 @@
     }).join('');
     return '<label class="fld"><span class="fld-l">' + esc(label) + '</span>' +
       '<select data-path="' + path + '" data-select="1">' + opts + '</select></label>';
+  }
+  /* optional colour: empty = inherit from theme (no misleading black swatch) */
+  function fColorOpt(label, path, fallback) {
+    var v = getPath(state, path);
+    var on = !!v;
+    return '<div class="fld color"><span class="fld-l">' + esc(label) + '</span>' +
+      '<div class="color-wrap">' +
+      '<label class="chk mini" title="Свой цвет или наследовать из темы">' +
+        '<input type="checkbox" data-act="optColor" data-path="' + path + '" data-fb="' +
+        esc(fallback || '#3c4858') + '"' + (on ? ' checked' : '') + '><span>свой</span></label>' +
+      (on ? '<input type="color" data-path="' + path + '" value="' + esc(v) + '">' +
+            '<input type="text" class="hex" data-path="' + path + '" value="' + esc(v) + '">'
+          : '<span class="opt-auto">из темы</span>') +
+      '</div></div>';
   }
   function fFile(label, path, opts) {
     opts = opts || {};
@@ -367,41 +382,44 @@
   function customFields(c, p) {
     var ALIGN = [{ v: 'left', l: 'Слева' }, { v: 'center', l: 'Центр' }, { v: 'right', l: 'Справа' }];
     switch (c.type) {
-      case 'text': return fText('Текст', p + 'text', { area: true, rows: 2 }) +
+      case 'text': return fText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 5 }) +
         '<div class="grid2">' + fRange('Размер', p + 'size', 8, 48, 1) + fRange('Жирность', p + 'weight', 300, 900, 100) + '</div>' +
-        '<div class="grid2">' + fColor('Цвет', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
+        '<div class="grid2">' + fColorOpt('Цвет', p + 'color') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
         '<div class="grid2">' + fSelect('Выравнивание', p + 'align', ALIGN) + fNum('Ширина', p + 'w', 20, 900, 1) + '</div>' +
         '<div class="grid2">' + fNum('Отступ', p + 'pad', 0, 40, 1) + fNum('Скругление', p + 'radius', 0, 30, 1) + '</div>';
       case 'box': return '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
-        '<div class="grid2">' + fColor('Фон', p + 'bg') + fColor('Рамка', p + 'border') + '</div>' +
+        '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#ffffff') + fColorOpt('Рамка', p + 'border', '#e7e9ef') + '</div>' +
         fNum('Скругление', p + 'radius', 0, 40, 1) + fCheck('Тень', p + 'shadow');
       case 'image': return fFile('Картинка', p + 'src') +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 10, 900, 1) + fNum('Высота', p + 'h', 10, 1600, 1) + '</div>' +
         '<div class="grid2">' + fNum('Скругление', p + 'radius', 0, 200, 1) +
           fSelect('Вписывание', p + 'fit', [{ v: 'cover', l: 'Заполнить' }, { v: 'contain', l: 'Вместить' }]) + '</div>';
       case 'line': return '<div class="grid2">' + fNum('Длина', p + 'w', 10, 900, 1) + fNum('Толщина', p + 'h', 1, 12, 1) + '</div>' +
-        fColor('Цвет', p + 'color');
+        fColorOpt('Цвет', p + 'color', '#eef0f3');
       case 'btn': return fText('Текст', p + 'text') +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fNum('Высота', p + 'h', 20, 80, 1) + '</div>' +
-        '<div class="grid2">' + fColor('Текст', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
-        '<div class="grid2">' + fColor('Рамка', p + 'border') + fNum('Скругление', p + 'radius', 0, 40, 1) + '</div>';
+        '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#ffffff') + '</div>' +
+        '<div class="grid2">' + fColorOpt('Рамка', p + 'border', '#dfe3ed') + fNum('Скругление', p + 'radius', 0, 40, 1) + '</div>';
       case 'badge': return fText('Текст', p + 'text') +
-        '<div class="grid2">' + fColor('Текст', p + 'color') + fColor('Фон', p + 'bg') + '</div>' +
+        '<div class="grid2">' + fColorOpt('Текст', p + 'color', '#f9423a') + fColorOpt('Фон', p + 'bg', '#feeceb') + '</div>' +
         '<div class="grid2">' + fRange('Размер', p + 'size', 7, 20, 1) + fNum('Скругление', p + 'radius', 0, 20, 1) + '</div>';
-      case 'info': return fText('Текст', p + 'text', { area: true, rows: 2 }) +
-        '<div class="grid2">' + fColor('Фон', p + 'bg') + fColor('Текст', p + 'color') + '</div>' +
+      case 'info': return fText('Текст (Enter — новая строка)', p + 'text', { area: true, rows: 4 }) +
+        '<div class="grid2">' + fColorOpt('Фон', p + 'bg', '#e9edff') + fColorOpt('Текст', p + 'color', '#26316d') + '</div>' +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 60, 900, 1) + fRange('Размер', p + 'size', 8, 20, 1) + '</div>';
       case 'row': return '<div class="grid2">' + fText('Слева', p + 'label') + fText('Справа', p + 'value') + '</div>' +
-        '<div class="grid2">' + fColor('Цвет слева', p + 'color') + fColor('Цвет справа', p + 'vcolor') + '</div>' +
+        '<div class="grid2">' + fColorOpt('Цвет слева', p + 'color') + fColorOpt('Цвет справа', p + 'vcolor') + '</div>' +
         '<div class="grid2">' + fNum('Ширина', p + 'w', 40, 900, 1) + fRange('Размер', p + 'size', 8, 30, 1) + '</div>';
     }
     return '';
   }
   function customEditor() {
     var list = state.custom || [];
-    var hint = '<div class="hint">Нажмите <b>«＋ Добавить на шаблон»</b> вверху, выберите элемент ' +
-      'и кликните по превью. Потом тяните его мышью, а тут — настройки. ' +
-      '<br>Del — удалить выделенный.</div>';
+    var hint = '<div class="hint">'
+      + '<b>1.</b> «＋ Добавить на шаблон» вверху → выберите элемент<br>'
+      + '<b>2.</b> кликните по превью — элемент встанет туда<br>'
+      + '<b>3.</b> <b>двойной клик</b> по нему на шаблоне — печатать текст прямо там (Enter — абзац)<br>'
+      + '<b>4.</b> тяните мышью • над выделенным всплывает панель ✎ ⧉ 🗑 • Del — удалить'
+      + '</div>';
     if (!list.length) return hint;
     return hint + list.map(function (c, i) {
       var p = 'custom.' + i + '.';
@@ -644,6 +662,9 @@
       var i = Number(b.dataset.i), j = act === 'up' ? i - 1 : i + 1;
       if (j < 0 || j >= arr.length) return;
       var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    } else if (act === 'optColor') {
+      var cur = getPath(state, b.dataset.path);
+      setPath(state, b.dataset.path, cur ? '' : (b.dataset.fb || '#3c4858'));
     } else if (act === 'selCustom') {
       selectCustom(b.dataset.id); return;
     } else if (act === 'delCustom') {
@@ -1045,6 +1066,7 @@
     Array.prototype.forEach.call(preview.querySelectorAll('[data-custom]'), function (el) {
       el.classList.toggle('sel', el.dataset.custom === id);
     });
+    positionSelBar();
     var det = controls.querySelector('details[data-sec="custom"]');
     if (det) {
       det.open = true;
@@ -1084,6 +1106,96 @@
     if (placing) return;
     var el = e.target.closest && e.target.closest('[data-custom]');
     if (el) selectCustom(el.dataset.custom);
+    else { selId = null; positionSelBar();
+      Array.prototype.forEach.call(preview.querySelectorAll('[data-custom].sel'),
+        function (x) { x.classList.remove('sel'); }); }
+  });
+
+  /* ===================================================================== */
+  /* Inline editing: double-click ANY text on the template and just type    */
+  /* ===================================================================== */
+  var editing = null;
+  var TEXT_FIELD = { text: 'text', badge: 'text', btn: 'text', info: 'text' };
+
+  function customById(id) {
+    return (state.custom || []).filter(function (c) { return c.id === id; })[0];
+  }
+  function startInlineEdit(el, apply, initial, multiline) {
+    if (editing) return;
+    editing = true;
+    el.setAttribute('contenteditable', 'plaintext-only');
+    el.classList.add('inline-edit');
+    el.focus();
+    try {
+      var rg = document.createRange(); rg.selectNodeContents(el);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+    } catch (e) {}
+    function finish(commit) {
+      if (!editing) return;
+      editing = null;
+      var txt = el.innerText.replace(/ /g, ' ').replace(/\n$/, '');
+      el.removeAttribute('contenteditable'); el.classList.remove('inline-edit');
+      if (commit && txt !== initial) { markChange('Правка текста на шаблоне'); apply(txt); }
+      rebuildForm(); renderPreview();
+    }
+    el.addEventListener('blur', function () { finish(true); }, { once: true });
+    el.addEventListener('keydown', function (ev) {
+      ev.stopPropagation();                       // don't trigger Del/undo shortcuts
+      if (ev.key === 'Escape') { ev.preventDefault(); editing = null; el.blur(); rebuildForm(); renderPreview(); }
+      if (ev.key === 'Enter' && !multiline) { ev.preventDefault(); el.blur(); }
+    });
+  }
+  preview.addEventListener('dblclick', function (e) {
+    if (placing) return;
+    var cu = e.target.closest && e.target.closest('[data-custom]');
+    if (cu) {
+      var c = customById(cu.dataset.custom);
+      if (!c) return;
+      if (c.type === 'row') {                      // edit the half you clicked
+        var part = e.target.closest('[data-part]');
+        var f = part ? part.dataset.part : 'label';
+        return startInlineEdit(part || cu, function (t) { c[f] = t; }, c[f], false);
+      }
+      var fld = TEXT_FIELD[c.type];
+      if (!fld) return;
+      return startInlineEdit(cu, function (t) { c[fld] = t; }, c[fld], c.type === 'text' || c.type === 'info');
+    }
+    var ed = e.target.closest && e.target.closest('[data-edit]');
+    if (ed) {
+      var path = ed.dataset.edit;
+      startInlineEdit(ed, function (t) { setPath(state, path, t); },
+        String(getPath(state, path) == null ? '' : getPath(state, path)),
+        /infoBox|product\.title/.test(path));
+    }
+  });
+
+  /* ---- floating toolbar over the selected custom element --------------- */
+  function positionSelBar() {
+    var bar = document.getElementById('selBar');
+    if (!bar) return;
+    var el = selId && preview.querySelector('[data-custom="' + selId + '"]');
+    if (!el) { bar.style.display = 'none'; return; }
+    var r = el.getBoundingClientRect();
+    bar.style.display = 'flex';
+    bar.style.left = (r.left + r.width / 2) + 'px';
+    bar.style.top = (r.top - 10) + 'px';
+  }
+  document.getElementById('selBar').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-sb]'); if (!b || !selId) return;
+    var i = (state.custom || []).findIndex(function (c) { return c.id === selId; });
+    if (i < 0) return;
+    var act = b.dataset.sb;
+    if (act === 'edit') {
+      var el = preview.querySelector('[data-custom="' + selId + '"]');
+      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      return;
+    }
+    if (act === 'dup') {
+      var cp = JSON.parse(JSON.stringify(state.custom[i])); cp.id = uid(); cp.x += 12; cp.y += 12;
+      markChange('Дублирован элемент'); state.custom.push(cp); selId = cp.id;
+    }
+    if (act === 'del') { markChange('Удалён элемент'); state.custom.splice(i, 1); selId = null; }
+    rebuildForm(); renderPreview();
   });
 
   /* ---- API card (key + publish template + docs) ------------------------ */
@@ -1163,7 +1275,8 @@
     var im = parserState && parserState.qr && parserState.qr.image;
     if (im) download(dataURLToBlob(im), 'qr.png'); else flash('В этом шаблоне нет QR');
   });
-  window.addEventListener('resize', function () { if (parserState) parserRender(); });
+  window.addEventListener('resize', function () { if (parserState) parserRender(); positionSelBar(); });
+  document.querySelector('.canvas-scroll').addEventListener('scroll', positionSelBar);
 
   /* ---- console / automation API --------------------------------------- */
   window.Builder = {
