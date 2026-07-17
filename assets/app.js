@@ -209,16 +209,19 @@
     return '<label class="fld"><span class="fld-l">' + esc(label) + '</span>' +
       '<select data-path="' + path + '" data-select="1">' + opts + '</select></label>';
   }
-  /* A formatted text must NOT be shown as raw HTML in a textarea. */
+  /* Full rich editor right in the panel: type, append, select a part and format
+     it — exactly like on the canvas. Never a read-only "notice". */
   function hasRich(v) { return /<(b|strong|i|em|u|s|span)\b/i.test(String(v || '')); }
   function fRichText(label, path, opts) {
+    opts = opts || {};
     var v = String(getPath(state, path) == null ? '' : getPath(state, path));
-    if (!hasRich(v)) return fText(label, path, opts);
+    var minH = (opts.rows || 2) * 19 + 12;
     return '<div class="fld"><span class="fld-l">' + esc(label) + '</span>' +
-      '<div class="rich-note">✨ Текст с форматированием — правьте <b>двойным кликом на шаблоне</b>' +
-      '<div class="rich-prev">' + window.sanitizeRich(v) + '</div>' +
-      '<button class="btn xs ghost" data-act="stripRich" data-path="' + path + '">Убрать форматирование</button>' +
-      '</div></div>';
+      '<div class="rich-input" contenteditable="true" data-rich="' + path + '" ' +
+        'style="min-height:' + minH + 'px">' + window.sanitizeRich(v) + '</div>' +
+      '<div class="rich-hint">Выделите часть текста → панель <b>B / A+ / 🎨</b>' +
+        (hasRich(v) ? ' · <button class="lnk" data-act="stripRich" data-path="' + path +
+          '">убрать форматирование</button>' : '') + '</div></div>';
   }
 
   /* optional colour: empty = inherit from theme (no misleading black swatch) */
@@ -588,6 +591,11 @@
 
   controls.addEventListener('input', function (e) {
     var t = e.target;
+    if (t.dataset.rich) {                       // rich editor in the panel
+      markChange('Правка текста', t.dataset.rich);
+      setPath(state, t.dataset.rich, normalizeRich(t.innerHTML));
+      renderPreview(); return;
+    }
     if (!t.dataset.path) return;
     markChange('Правка: ' + pathLabel(t.dataset.path), t.dataset.path);
     setPath(state, t.dataset.path, coerce(t));
@@ -1132,6 +1140,12 @@
   /* Inline editing: double-click ANY text on the template and just type    */
   /* ===================================================================== */
   var editing = null;
+  function normalizeRich(html) {
+    return window.sanitizeRich(html)
+      .replace(/<div><br><\/div>/gi, '<br>')
+      .replace(/<div>/gi, '<br>').replace(/<\/div>/gi, '')
+      .replace(/^(?:<br>)+/i, '').replace(/(?:<br>)+$/i, '');
+  }
   var TEXT_FIELD = { text: 'text', badge: 'text', btn: 'text', info: 'text' };
 
   /* ---- format the SELECTED part of the text (bold / size / colour) ------ */
@@ -1207,24 +1221,27 @@
   }
   /* Rich inline editor: type freely, Enter = new line, select any part ->
      the format bar lets you make just that part bold / bigger / coloured. */
-  function startInlineEdit(el, apply, initial) {
+  function caretToEnd(el) {
+    try {
+      var rg = document.createRange(); rg.selectNodeContents(el); rg.collapse(false);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+    } catch (e) {}
+  }
+  function startInlineEdit(el, apply, initial, caretEnd) {
     if (editing) return;
     editing = el;
     el.setAttribute('contenteditable', 'true');
     el.classList.add('inline-edit');
     el.focus();
-    try {
-      var rg = document.createRange(); rg.selectNodeContents(el);
-      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
-    } catch (e) {}
+    // NB: never select-all — that made typing wipe the text. A double-click
+    // keeps the browser's word selection; the ✎ button puts the caret at the end
+    // so you can just keep typing (дописать).
+    if (caretEnd) caretToEnd(el);
     setTimeout(showFmtBarForSelection, 0);
     function finish(commit) {
       if (!editing) return;
       editing = null; hideFmtBar();
-      var html = window.sanitizeRich(el.innerHTML)
-        .replace(/<div><br><\/div>/gi, '<br>')
-        .replace(/<div>/gi, '<br>').replace(/<\/div>/gi, '')
-        .replace(/^(?:<br>)+/i, '').replace(/(?:<br>)+$/i, '');
+      var html = normalizeRich(el.innerHTML);
       el.removeAttribute('contenteditable'); el.classList.remove('inline-edit');
       if (commit && html !== initial) { markChange('Правка текста на шаблоне'); apply(html); }
       rebuildForm(); renderPreview();
@@ -1249,7 +1266,8 @@
       }
       var fld = TEXT_FIELD[c.type];
       if (!fld) return;
-      return startInlineEdit(cu, function (t) { c[fld] = t; }, c[fld]);
+      var ce = cu.dataset.caretEnd === '1'; delete cu.dataset.caretEnd;
+      return startInlineEdit(cu, function (t) { c[fld] = t; }, c[fld], ce);
     }
     var ed = e.target.closest && e.target.closest('[data-edit]');
     if (ed) {
@@ -1257,6 +1275,16 @@
       startInlineEdit(ed, function (t) { setPath(state, path, t); },
         String(getPath(state, path) == null ? '' : getPath(state, path)));
     }
+  });
+
+  /* the panel's rich editor uses the very same format bar */
+  controls.addEventListener('focusin', function (e) {
+    if (e.target.dataset && e.target.dataset.rich) { editing = e.target; setTimeout(showFmtBarForSelection, 0); }
+  });
+  controls.addEventListener('focusout', function (e) {
+    if (e.target.dataset && e.target.dataset.rich) setTimeout(function () {
+      if (editing === e.target) { editing = null; hideFmtBar(); }
+    }, 150);
   });
 
   /* ---- floating toolbar over the selected custom element --------------- */
@@ -1277,7 +1305,7 @@
     var act = b.dataset.sb;
     if (act === 'edit') {
       var el = preview.querySelector('[data-custom="' + selId + '"]');
-      if (el) el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      if (el) { el.dataset.caretEnd = '1'; el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); }
       return;
     }
     if (act === 'dup') {
