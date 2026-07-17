@@ -57,7 +57,8 @@
 '.sc-product{display:flex;align-items:center;gap:12px;}',
 '.sc-product-img{width:44px;height:44px;border-radius:6px;object-fit:cover;',
 '  flex:0 0 auto;background:var(--img-bg,#eceef2);border:1px solid rgba(0,0,0,.04);}',
-'.sc-product-title{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.25;}',
+'.sc-product-title{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.25;',
+'  white-space:pre-wrap;}',
 
 '.sc-divider{height:1px;background:var(--divider);margin:11px 0;}',
 
@@ -75,7 +76,7 @@
 '  padding:10px 12px;margin-top:12px;}',
 '.sc-info-ico{width:16px;height:16px;color:var(--info-text);flex:0 0 auto;margin-top:1px;}',
 '.sc-info-ico svg{width:100%;height:100%;display:block;}',
-'.sc-info-txt{font-size:12px;line-height:1.42;color:var(--info-text);}',
+'.sc-info-txt{font-size:12px;line-height:1.42;color:var(--info-text);white-space:pre-wrap;}',
 '.sc-info-link{color:var(--info-link);cursor:default;}',
 
 /* ---- total ---- */
@@ -140,10 +141,12 @@
 /* ---- custom (user-added) elements ---- */
 '.sc-custom{position:absolute;box-sizing:border-box;}',
 '.sc-c-text{white-space:pre-wrap;word-break:break-word;}',
-'.sc-c-btn{display:flex;align-items:center;justify-content:center;font-weight:700;}',
+'.sc-c-btn{display:flex;align-items:center;justify-content:center;font-weight:700;',
+'  white-space:pre-wrap;text-align:center;}',
 '.sc-c-badge{display:inline-block;font-weight:700;text-transform:uppercase;',
-'  letter-spacing:.6px;}',
+'  letter-spacing:.6px;white-space:pre-wrap;}',
 '.sc-c-info{display:flex;gap:8px;}',
+'.sc-c-info .txt{white-space:pre-wrap;word-break:break-word;}',
 '.sc-c-info .ico{flex:0 0 auto;margin-top:1px;}',
 '.sc-c-info .ico svg{width:16px;height:16px;display:block;}',
 '.sc-c-row{display:flex;align-items:center;justify-content:space-between;gap:12px;}'
@@ -400,7 +403,7 @@
       if (c.type === 'info') {
         return '<div' + A + box + 'background:' + (c.bg || 'var(--info-bg)') + ';color:' +
           (c.color || 'var(--info-text)') + ';border-radius:' + c.radius + 'px;padding:10px 12px;font-size:' +
-          c.size + 'px;line-height:1.42;"><span class="ico">' + ICONS.info + '</span><span>' +
+          c.size + 'px;line-height:1.42;"><span class="ico">' + ICONS.info + '</span><span class="txt">' +
           esc(c.text) + '</span></div>';
       }
       if (c.type === 'row') {
