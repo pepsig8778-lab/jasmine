@@ -1350,7 +1350,7 @@
   var pickingColor = false;
   fmtBar.addEventListener('mousedown', function (e) {
     if (e.target.closest('.fmt-color')) pickingColor = true;
-    else e.preventDefault();
+    else { pickingColor = false; e.preventDefault(); }
   });
   fmtBar.addEventListener('click', function (e) {
     var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
@@ -1367,6 +1367,12 @@
   });
   var fmtColorEl = document.getElementById('fmtColor');
   function applyColour() {
+    // 'input'/'change' firing is the ONLY reliable sign the picker is done —
+    // the eyedropper tool hides the picker (and blurs #fmtColor) mid-flow
+    // while the user samples a pixel on the template, then reopens it, so a
+    // plain "blur" on the colour input is NOT a trustworthy "user is done"
+    // signal here and must not end the edit session on its own.
+    pickingColor = false;
     if (!editing) return;
     fmtBusy = true;
     restoreSel();
@@ -1377,11 +1383,6 @@
   }
   fmtColorEl.addEventListener('input', applyColour);
   fmtColorEl.addEventListener('change', applyColour);
-  // Picker closed (colour chosen or cancelled) — hand focus back to the editor.
-  fmtColorEl.addEventListener('blur', function () {
-    pickingColor = false;
-    if (editing) editing.focus();
-  });
 
   /* Rich inline editor: type freely, Enter = new line, select any part ->
      the format bar lets you make just that part bold / bigger / coloured. */
@@ -1394,8 +1395,10 @@
       var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
     } catch (e) {}
   }
+  var activeFinish = null;      // finish() of whichever canvas element is mid-edit
   function startInlineEdit(el, apply, initial, caretEnd) {
-    if (editing) return;
+    if (editing === el) return;
+    if (editing && activeFinish) { pickingColor = false; activeFinish(true); }
     editing = el;
     el.setAttribute('contenteditable', 'true');
     el.classList.add('inline-edit');
@@ -1407,13 +1410,15 @@
     setTimeout(showFmtBarForSelection, 0);
     function finish(commit) {
       el.removeEventListener('blur', onBlur);
-      if (!editing) return;
+      if (activeFinish === finish) activeFinish = null;
+      if (editing !== el) return;
       editing = null; hideFmtBar();
       var html = normalizeRich(el.innerHTML);
       el.removeAttribute('contenteditable'); el.classList.remove('inline-edit');
       if (commit && html !== initial) { markChange('Правка текста на шаблоне'); apply(html); }
       rebuildForm(); renderPreview();
     }
+    activeFinish = finish;
     function onBlur() {
       if (pickingColor) return;                  // colour picker stole focus — keep editing
       finish(true);
@@ -1451,7 +1456,10 @@
 
   /* the panel's rich editor uses the very same format bar */
   controls.addEventListener('focusin', function (e) {
-    if (e.target.dataset && e.target.dataset.rich) { editing = e.target; setTimeout(showFmtBarForSelection, 0); }
+    if (e.target.dataset && e.target.dataset.rich) {
+      if (editing && editing !== e.target && activeFinish) { pickingColor = false; activeFinish(true); }
+      pickingColor = false; editing = e.target; setTimeout(showFmtBarForSelection, 0);
+    }
   });
   controls.addEventListener('focusout', function (e) {
     if (e.target.dataset && e.target.dataset.rich) setTimeout(function () {
