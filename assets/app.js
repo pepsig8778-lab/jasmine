@@ -51,11 +51,29 @@
   document.head.appendChild(st);
 
   /* ---- render preview -------------------------------------------------- */
+  var fitNeed = 0;
+  /* Warn when content doesn't fit the fixed canvas (it gets silently cropped,
+     e.g. after adding rows or turning the QR "block" on). */
+  function updateFitWarn() {
+    var box = document.getElementById('fitWarn');
+    if (!box) return;
+    var body = preview.querySelector('.sc-body');
+    var need = body ? body.offsetTop + body.scrollHeight : 0;
+    Array.prototype.forEach.call(preview.querySelectorAll('[data-block].free'), function (el) {
+      need = Math.max(need, el.offsetTop + el.offsetHeight);
+    });
+    fitNeed = Math.ceil(need) + 6;
+    var over = fitNeed > (state.canvas.height || 826) + 1;
+    box.style.display = over ? 'flex' : 'none';
+    if (over) document.getElementById('fitMsg').textContent =
+      '⚠ Контент обрезан (нужно ' + fitNeed + 'px)';
+  }
   function renderPreview() {
     window.renderScreen(preview, state);
     preview.style.transform = 'scale(' + zoom + ')';
     canvasWrap.style.width = (state.canvas.width * zoom) + 'px';
     canvasWrap.style.height = (state.canvas.height * zoom) + 'px';
+    updateFitWarn();
     persist();
   }
 
@@ -362,25 +380,8 @@
     return input.value;
   }
 
-  /* Build the styled-render options object from a qr config. */
-  function qrOpts(q) {
-    return {
-      data: q.data, ecl: q.ecl || 'M', scale: 8,
-      moduleShape: q.moduleShape || 'square', eyeShape: q.eyeShape || 'square',
-      dark: q.dark || '#000000', light: q.light || '#ffffff',
-      eyeColor: q.eyeColor || '', margin: q.margin == null ? 4 : q.margin,
-      gradient: q.gradient || 'none', gradientColor: q.gradientColor || q.dark,
-      gradientAngle: q.gradientAngle == null ? 45 : q.gradientAngle,
-      radius: q.radius || 0, logo: q.logo || '', logoScale: q.logoScale || 0.22
-    };
-  }
-  /* Render qr.image for any qr config. Returns a Promise. */
-  function renderQR(q) {
-    if (!q) return Promise.resolve();
-    if (q.mode === 'custom') { q.image = q.custom || ''; return Promise.resolve(); }
-    if (!q.data || !window.QR || !window.QR.render) { q.image = ''; return Promise.resolve(); }
-    return window.QR.render(qrOpts(q)).then(function (url) { q.image = url; }, function () { q.image = ''; });
-  }
+  /* shared with the API renderer — see assets/apply.js */
+  var renderQR = window.SubitoApply.renderQR;
   /* Generate QR for the builder's state, then refresh thumb. Returns Promise. */
   function genQR() {
     var q = state.qr || (state.qr = {});
@@ -462,6 +463,8 @@
       state.shipping.options.splice(Number(b.dataset.i), 1);
     } else if (act === 'clear') {
       setPath(state, b.dataset.path, '');
+      // removing the custom QR image must fall back to the generated one
+      if (b.dataset.path === 'qr.custom') state.qr.mode = 'generated';
       if (b.dataset.path.slice(0, 3) === 'qr.') { afterQR(); return; }
     } else if (act === 'up' || act === 'down') {
       var arr = b.dataset.kind === 'row' ? state.summary.rows
@@ -476,7 +479,9 @@
       state.layout.free = state.layout.free || {};
       if (state.layout.free[key]) { delete state.layout.free[key]; }
       else {
-        var elb = preview.querySelector('[data-block="' + key + '"]'), fp = { x: 20, y: 90, w: null };
+        var elb = preview.querySelector('[data-block="' + key + '"]');
+        // hidden sections aren't rendered -> fall back to a sane in-frame default
+        var fp = { x: 16, y: 90, w: Math.max(80, (state.canvas.width || 418) - 32) };
         if (elb) {
           var pr = preview.getBoundingClientRect(), rr = elb.getBoundingClientRect();
           fp = { x: Math.round((rr.left - pr.left) / zoom), y: Math.round((rr.top - pr.top) / zoom), w: Math.round(elb.offsetWidth) };
@@ -555,6 +560,9 @@
 
   function bind(id, fn) { var e = document.getElementById(id); if (e) e.addEventListener('click', fn); }
 
+  bind('fitBtn', function () {
+    if (fitNeed > 0) { state.canvas.height = fitNeed; rebuildForm(); renderPreview(); flash('Высота подогнана: ' + fitNeed + 'px'); }
+  });
   bind('zoomIn', function () { zoom = Math.min(2, zoom + 0.1); renderPreview(); });
   bind('zoomOut', function () { zoom = Math.max(0.4, zoom - 0.1); renderPreview(); });
   bind('zoomReset', function () { zoom = 1; renderPreview(); });
@@ -725,47 +733,8 @@
     el.style.zoom = parserZoom;
   }
 
-  /* format helpers matching the Italian screenshot style */
-  function eurJS(x) {
-    var s = (Math.round(x * 100) / 100).toFixed(2).split('.');
-    return s[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + s[1] + ' €';
-  }
-  function parsePriceJS(s) {
-    s = String(s == null ? '' : s).replace(/[^0-9.,]/g, '').replace(/\./g, '').replace(',', '.');
-    return parseFloat(s) || 0;
-  }
-
-  /* Inject listing DATA into the user's constructor template — keeping ALL
-     styling, QR, sections and settings exactly as configured in the builder. */
-  function applyListingData(base, data) {
-    var cfg = clone(base);
-    var s = cfg.summary || (cfg.summary = {});
-    s.product = s.product || {};
-    if (data.image) s.product.image = data.image;
-    if (data.title) s.product.title = data.title;
-
-    var rows = s.rows || [];
-    function findRow(re) { for (var i = 0; i < rows.length; i++) { if (re.test(rows[i].label || '')) return rows[i]; } return null; }
-    var itemRow = findRow(/oggett|item|товар|prezzo|цена/i) || rows[0];
-    var protRow = findRow(/protezion|protection|защит/i);
-    if (itemRow) itemRow.value = eurJS(data.price);
-    if (protRow) protRow.value = eurJS(data.protezione);
-
-    var shipRow = findRow(/spediz|shipping|достав/i);
-    var ship = shipRow ? parsePriceJS(shipRow.value) : (data.ship_pickup || 0);
-    if (s.total) s.total.value = eurJS(data.price + ship + data.protezione);
-
-    // QR: keep the template's QR style/position. Custom uploaded QR stays as-is;
-    // a generated QR is re-pointed at this listing (image rendered async after).
-    if (cfg.qr) {
-      if (cfg.qr.mode === 'custom') {
-        cfg.qr.image = cfg.qr.custom || cfg.qr.image || '';
-      } else {
-        cfg.qr.data = data.url;
-      }
-    }
-    return cfg;
-  }
+  /* shared with the API renderer — see assets/apply.js */
+  var applyListingData = window.SubitoApply.applyListingData;
 
   function renderParserOpts() {
     var box = document.getElementById('pOpts');
@@ -821,6 +790,64 @@
       flash('Ошибка: ' + err.message);
     }).then(function () { go.disabled = false; go.textContent = 'Собрать'; });
   }
+  /* ---- API card (key + publish template + docs) ------------------------ */
+  var apiKeyEl = document.getElementById('apiKey');
+  function apiOrigin() { return location.origin + location.pathname.replace(/\/[^\/]*$/, ''); }
+  function apiMsg(html, bad) {
+    document.getElementById('apiMsg').innerHTML =
+      '<span style="color:' + (bad ? '#ff9' : '#c9ffdc') + '">' + html + '</span>';
+  }
+  function refreshApiDocs() {
+    var k = (apiKeyEl.value || 'ВАШ_КЛЮЧ').trim();
+    var base = apiOrigin() + '/api/image';
+    var u = base + '?key=' + encodeURIComponent(k) + '&url=<ССЫЛКА_SUBITO>&scale=2';
+    document.getElementById('apiUrl').textContent = 'GET ' + u;
+    document.getElementById('apiCurl').textContent =
+      'curl -o out.png "' + base + '?key=' + k +
+      '&url=https://www.subito.it/.../annuncio-123.htm&scale=2"';
+    try { localStorage.setItem('api-key', apiKeyEl.value || ''); } catch (e) {}
+  }
+  apiKeyEl.addEventListener('input', refreshApiDocs);
+  try { apiKeyEl.value = localStorage.getItem('api-key') || ''; } catch (e) {}
+  // on localhost the server reveals the auto-generated key for convenience
+  if (!apiKeyEl.value) {
+    fetch('api/key').then(function (r) { return r.json(); }).then(function (res) {
+      if (res.ok && res.key) { apiKeyEl.value = res.key; refreshApiDocs(); }
+    }).catch(function () {});
+  }
+  refreshApiDocs();
+
+  document.getElementById('apiPublish').addEventListener('click', function () {
+    var k = (apiKeyEl.value || '').trim();
+    if (!k) { apiMsg('Сначала укажите API-ключ', true); return; }
+    apiMsg('Публикую шаблон…');
+    fetch('api/template?key=' + encodeURIComponent(k), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state)
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'ошибка');
+      apiMsg('✓ Шаблон опубликован — API теперь рендерит в этом оформлении.');
+    }).catch(function (e) { apiMsg('Ошибка: ' + esc(e.message), true); });
+  });
+  document.getElementById('apiTest').addEventListener('click', function () {
+    var k = (apiKeyEl.value || '').trim();
+    var url = (document.getElementById('pUrl').value || '').trim();
+    if (!/subito\.it\//i.test(url)) { apiMsg('Вставьте ссылку Subito в поле выше — проверю на ней', true); return; }
+    apiMsg('Проверяю API…');
+    fetch('api/image?key=' + encodeURIComponent(k) + '&url=' + encodeURIComponent(url) + '&scale=1')
+      .then(function (r) {
+        if (r.headers.get('content-type') === 'image/png') return r.blob();
+        return r.json().then(function (j) { throw new Error(j.error || ('HTTP ' + r.status)); });
+      })
+      .then(function (b) { apiMsg('✓ API работает — картинка ' + Math.round(b.size / 1024) + ' КБ. ' +
+        '<a href="' + URL.createObjectURL(b) + '" target="_blank" style="color:#9fd">открыть</a>'); })
+      .catch(function (e) { apiMsg('Ошибка: ' + esc(e.message), true); });
+  });
+  document.getElementById('apiTpl').addEventListener('click', function () {
+    download(JSON.stringify(state, null, 2), 'template.json', 'application/json');
+    apiMsg('Положите template.json в корень репозитория и запушьте — шаблон переживёт перезапуск.');
+  });
+
   document.getElementById('pGo').addEventListener('click', parserLoad);
   document.getElementById('pUrl').addEventListener('keydown', function (e) { if (e.key === 'Enter') parserLoad(); });
 

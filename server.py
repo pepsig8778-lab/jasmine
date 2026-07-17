@@ -12,7 +12,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "api"))
-import _subito  # noqa: E402
+import _subito   # noqa: E402
+import _store    # noqa: E402
+import _render    # noqa: E402
 
 
 def opts_from_query(q):
@@ -40,10 +42,23 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _png(self, data):
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _is_local(self):
+        return self.client_address and self.client_address[0] in ("127.0.0.1", "::1", "localhost")
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        q = urllib.parse.parse_qs(parsed.query)
+
         if parsed.path == "/api/parse":
-            q = urllib.parse.parse_qs(parsed.query)
             url = (q.get("url", [""])[0] or "").strip()
             if "subito.it" not in url:
                 return self._json({"ok": False, "error": "ссылка должна быть subito.it"})
@@ -51,7 +66,62 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": True, "data": _subito.fetch_data(url, opts_from_query(q))})
             except Exception as e:  # noqa: BLE001
                 return self._json({"ok": False, "error": str(e)})
+
+        # --- API: listing URL -> ready PNG -------------------------------
+        if parsed.path in ("/api/image", "/api/render"):
+            if not _store.check_key(q.get("key", [""])[0]):
+                return self._json({"ok": False, "error": "неверный или отсутствующий API-ключ (?key=...)"}, 401)
+            url = (q.get("url", [""])[0] or "").strip()
+            if "subito.it" not in url:
+                return self._json({"ok": False, "error": "нужен параметр url= со ссылкой subito.it"}, 400)
+            try:
+                scale = int(q.get("scale", ["2"])[0])
+            except ValueError:
+                scale = 2
+            try:
+                data = _subito.fetch_data(url, opts_from_query(q))
+                tpl, _src = _store.load_template()
+                return self._png(_render.render_png(tpl, data, scale))
+            except Exception as e:  # noqa: BLE001
+                return self._json({"ok": False, "error": str(e)}, 500)
+
+        # --- API: status (template source / render backend) ---------------
+        if parsed.path == "/api/status":
+            if not _store.check_key(q.get("key", [""])[0]):
+                return self._json({"ok": False, "error": "неверный API-ключ"}, 401)
+            tpl, src = _store.load_template()
+            try:
+                import playwright  # noqa: F401
+                backend = "playwright"
+            except ImportError:
+                backend = "chrome" if _render._find_chrome() else "none"
+            return self._json({"ok": True, "templateSource": src,
+                               "hasTemplate": bool(tpl), "renderer": backend})
+
+        # --- API key: only readable from localhost (never over the net) ---
+        if parsed.path == "/api/key":
+            if not self._is_local():
+                return self._json({"ok": False, "error":
+                                   "Ключ виден только на localhost. На хостинге задайте переменную API_KEY."}, 403)
+            k, src = _store.get_api_key()
+            return self._json({"ok": True, "key": k, "source": src})
+
         return super().do_GET()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        q = urllib.parse.parse_qs(parsed.query)
+        if parsed.path == "/api/template":
+            if not _store.check_key(q.get("key", [""])[0]):
+                return self._json({"ok": False, "error": "неверный API-ключ"}, 401)
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                cfg = json.loads(self.rfile.read(n).decode("utf-8"))
+                _store.save_template(cfg)
+                return self._json({"ok": True, "saved": True})
+            except Exception as e:  # noqa: BLE001
+                return self._json({"ok": False, "error": str(e)}, 400)
+        self.send_error(404)
 
     def log_message(self, fmt, *args):
         if "/api/parse" in (self.path or ""):

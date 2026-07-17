@@ -65,6 +65,10 @@
   .parser-placeholder{color:var(--ink-dim);font-size:13px;text-align:center;margin:auto;
     max-width:280px;line-height:1.6;}
   .parser-placeholder .big{font-size:40px;opacity:.5;display:block;margin-bottom:10px;}
+  .api-card{margin-top:16px;}
+  .code{background:var(--field);border:1px solid var(--field-line);border-radius:8px;
+    padding:9px 10px;font-size:11px;font-family:ui-monospace,Consolas,monospace;
+    color:#cfe3ff;white-space:pre-wrap;word-break:break-all;margin:0 0 4px;}
   .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;
     border-bottom:1px solid var(--line);}
   .kv:last-child{border-bottom:0;} .kv b{color:var(--ink);} .kv span{color:var(--ink-dim);}
@@ -182,6 +186,7 @@
   .toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px;}
   .toolbar .spacer{flex:1;}
   .toolbar .lbl{font-size:11px;color:var(--ink-dim);margin-right:2px;}
+  .toolbar .warn{font-size:11px;color:#ffcf70;}
   .canvas-scroll{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;
     padding:34px;}
   #canvasWrap{position:relative;flex:0 0 auto;}
@@ -239,6 +244,11 @@
             <button class="btn sm primary" id="png2">2×</button>
             <button class="btn sm" id="png3">3×</button>
           </div>
+          <div class="sep"></div>
+          <div class="grp" id="fitWarn" style="display:none">
+            <span class="warn" id="fitMsg">⚠ Контент обрезан</span>
+            <button class="btn sm" id="fitBtn">Подогнать высоту</button>
+          </div>
         </div>
         <div class="canvas-scroll">
           <div id="canvasWrap"><div id="preview" class="screen"></div></div>
@@ -259,7 +269,29 @@
           <button class="btn primary" id="pGo">Собрать</button>
         </div>
         <div class="parser-grid">
-          <div class="parser-card" id="pOpts"><!-- options generated --></div>
+          <div>
+            <div class="parser-card" id="pOpts"><!-- options generated --></div>
+            <div class="parser-card api-card">
+              <h3>🔑 API — ссылка → готовая картинка</h3>
+              <div class="hint">Настроили шаблон в «Конструкторе» → опубликуйте его → дёргайте
+                API из любой системы: отдаёте ссылку Subito, получаете PNG.</div>
+              <label class="fld"><span class="fld-l">API-ключ</span>
+                <input type="text" id="apiKey" placeholder="вставьте ключ (env API_KEY)"></label>
+              <div class="qr-actions">
+                <button class="btn sm" id="apiPublish">Опубликовать шаблон</button>
+                <button class="btn sm ghost" id="apiTest">Проверить</button>
+                <button class="btn sm ghost" id="apiTpl">template.json</button>
+              </div>
+              <div class="hint" id="apiMsg" style="margin-top:8px"></div>
+              <div class="sub">Запрос</div>
+              <pre class="code" id="apiUrl"></pre>
+              <div class="sub">Пример</div>
+              <pre class="code" id="apiCurl"></pre>
+              <div class="hint">Параметры: <code>key</code>, <code>url</code>,
+                <code>scale</code> (1–3). Ответ: <code>image/png</code>.
+                Ошибки: JSON с <code>error</code> (401 — ключ, 400 — ссылка, 500 — парсинг).</div>
+            </div>
+          </div>
           <div class="parser-result">
             <div class="rtoolbar" id="pToolbar" style="display:none">
               <span class="lbl">Экспорт PNG</span>
@@ -289,6 +321,7 @@
   <script src="assets/config.js"></script>
   <script src="assets/builder.js"></script>
   <script src="assets/qr.js"></script>
+  <script src="assets/apply.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

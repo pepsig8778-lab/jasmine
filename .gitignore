@@ -9,3 +9,7 @@ __pycache__/
 .vercel/
 out/
 node_modules/
+
+# api key (local dev)
+.apikey
+template.runtime.json

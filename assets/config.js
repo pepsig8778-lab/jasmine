@@ -33,7 +33,8 @@ window.DEFAULT_CONFIG = {
   },
   "header": {
     "title": "Acquista a distanza",
-    "showClose": true
+    "showClose": true,
+    "show": true
   },
   "summary": {
     "title": "Riepilogo ordine",
@@ -69,12 +70,14 @@ window.DEFAULT_CONFIG = {
     "total": {
       "label": "Totale",
       "value": "318,59 €"
-    }
+    },
+    "show": true
   },
   "discount": {
     "title": "Aggiungi un codice sconto",
     "placeholder": "Ad esempio SCONTO10",
-    "value": ""
+    "value": "",
+    "show": true
   },
   "shipping": {
     "title": "Modalità di spedizione",
@@ -99,7 +102,8 @@ window.DEFAULT_CONFIG = {
         "carrier": "Poste Italiane",
         "carrierLogo": ""
       }
-    ]
+    ],
+    "show": true
   },
   "qr": {
     "show": false,
