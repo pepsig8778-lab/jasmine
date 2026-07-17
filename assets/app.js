@@ -1214,16 +1214,26 @@
   }
   var TEXT_FIELD = { text: 'text', badge: 'text', btn: 'text', info: 'text' };
 
-  /* ---- format the SELECTED part of the text (bold / size / colour) ------ */
+  /* ---- format the SELECTED part of the text (bold / size / colour) ------
+     Rules that make this actually work:
+       1. remember the selection — opening the colour picker clears it;
+       2. never hand-wrap <span>s (that nested a new span per mouse-move and
+          made re-colouring a second part impossible). Let the browser
+          normalise via execCommand, which replaces existing formatting. */
   var fmtBar = document.getElementById('fmtBar');
-  function hideFmtBar() { fmtBar.style.display = 'none'; }
-  /* While editing the bar is ALWAYS visible: over the selection if there is one,
-     otherwise over the element itself (then formatting applies to the whole text). */
+  var savedRange = null;
+  function hideFmtBar() { fmtBar.style.display = 'none'; savedRange = null; }
+
+  function selInside() {
+    var sel = window.getSelection();
+    if (!editing || !sel || !sel.rangeCount || sel.isCollapsed) return null;
+    return editing.contains(sel.anchorNode) && editing.contains(sel.focusNode) ? sel : null;
+  }
   function showFmtBarForSelection() {
     if (!editing) return hideFmtBar();
-    var sel = window.getSelection();
-    var r = null;
-    if (sel && sel.rangeCount && !sel.isCollapsed) {
+    var sel = selInside(), r = null;
+    if (sel) {
+      savedRange = sel.getRangeAt(0).cloneRange();     // survive the colour picker
       var rr = sel.getRangeAt(0).getBoundingClientRect();
       if (rr.width || rr.height) r = rr;
     }
@@ -1236,57 +1246,109 @@
     var tip = fmtBar.querySelector('.fmt-tip');
     if (tip) tip.textContent = whole ? 'весь текст' : 'выделено';
   }
-  /* No selection? Then the user means "the whole text" — select it silently. */
-  function ensureSelection() {
-    var sel = window.getSelection();
-    if (sel && sel.rangeCount && !sel.isCollapsed) return;
-    var r = document.createRange(); r.selectNodeContents(editing);
-    sel.removeAllRanges(); sel.addRange(r);
-  }
   document.addEventListener('selectionchange', function () {
-    if (editing) showFmtBarForSelection();
-  });
-  /* wrap the current selection in a styled <span> */
-  function styleSelection(css) {
-    var sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.isCollapsed) return;
-    var range = sel.getRangeAt(0);
-    var span = document.createElement('span');
-    Object.keys(css).forEach(function (k) { span.style[k] = css[k]; });
-    try { range.surroundContents(span); }
-    catch (e) { span.appendChild(range.extractContents()); range.insertNode(span); }
-    // keep the same text selected so you can chain B -> bigger -> colour
-    var nr = document.createRange(); nr.selectNodeContents(span);
-    sel.removeAllRanges(); sel.addRange(nr);
-    showFmtBarForSelection();
-  }
-  function selectionFontSize() {
-    var sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return 14;
-    var n = sel.getRangeAt(0).startContainer;
-    if (n.nodeType === 3) n = n.parentNode;
-    return parseFloat(window.getComputedStyle(n).fontSize) || 14;
-  }
-  fmtBar.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep the selection
-  fmtBar.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
-    var f = b.dataset.fmt;
-    ensureSelection();
-    try { document.execCommand('styleWithCSS', false, true); } catch (err) {}
-    if (f === 'bold' || f === 'italic' || f === 'underline') document.execCommand(f, false, null);
-    else if (f === 'clear') document.execCommand('removeFormat', false, null);
-    else if (f === 'bigger') styleSelection({ fontSize: Math.min(72, Math.round(selectionFontSize() * 1.2)) + 'px' });
-    else if (f === 'smaller') styleSelection({ fontSize: Math.max(6, Math.round(selectionFontSize() / 1.2)) + 'px' });
-  });
-  document.getElementById('fmtColor').addEventListener('input', function () {
-    if (editing) { ensureSelection(); styleSelection({ color: this.value }); }
+    if (editing && !fmtBusy) showFmtBarForSelection();
   });
 
+  /* Put the caret/selection back exactly where it was, then focus the editor
+     so execCommand targets it. Falls back to "the whole text". */
+  var fmtBusy = false;
+  function restoreSel() {
+    if (!editing) return false;
+    editing.focus();
+    if (selInside()) return true;                       // still selected
+    var sel = window.getSelection();
+    if (savedRange && editing.contains(savedRange.commonAncestorContainer)) {
+      sel.removeAllRanges(); sel.addRange(savedRange);  // picker stole it -> restore
+      return true;
+    }
+    var r = document.createRange(); r.selectNodeContents(editing);
+    sel.removeAllRanges(); sel.addRange(r);             // nothing selected -> whole text
+    return true;
+  }
+  function afterFmt() {
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) savedRange = sel.getRangeAt(0).cloneRange();
+    if (editing && editing.dataset.rich) {              // panel editor -> save live
+      setPath(state, editing.dataset.rich, normalizeRich(editing.innerHTML));
+      markChange('Формат текста', editing.dataset.rich);
+      renderPreview();
+    }
+    showFmtBarForSelection();
+  }
+  /* Size of the text that is ACTUALLY selected. A range often starts at the very
+     end of the previous text node — taking that node's parent would read the
+     base size and A+ would never compound. So find the first text node that the
+     range really covers. */
+  function selectionFontSize() {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !editing) return 14;
+    var r = sel.getRangeAt(0), node = null;
+    var w = document.createTreeWalker(editing, NodeFilter.SHOW_TEXT, null, false), n;
+    while ((n = w.nextNode())) {
+      if (!r.intersectsNode(n) || !n.nodeValue.trim()) continue;
+      if (n === r.startContainer && r.startOffset >= n.nodeValue.length) continue; // touches the end only
+      if (n === r.endContainer && r.endOffset === 0) continue;                     // touches the start only
+      node = n; break;
+    }
+    if (!node) node = r.startContainer;
+    if (node.nodeType === 3) node = node.parentNode;
+    return parseFloat(window.getComputedStyle(node).fontSize) || 14;
+  }
+  /* execCommand('fontSize') only speaks 1..7, so use it to let the BROWSER split
+     the range correctly, then swap the <font> tags for real px spans. */
+  function applyFontSize(px) {
+    // styleWithCSS must be OFF here, otherwise Chrome emits font-size:xxx-large
+    // (a keyword) instead of the <font size=7> tags we convert to real px.
+    try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+    document.execCommand('fontSize', false, '7');
+    try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+    Array.prototype.forEach.call(editing.querySelectorAll('font[size="7"]'), function (f) {
+      var sp = document.createElement('span');
+      sp.style.fontSize = px + 'px';
+      while (f.firstChild) sp.appendChild(f.firstChild);
+      f.parentNode.replaceChild(sp, f);
+    });
+    // belt & braces: if the browser used the CSS keyword anyway, fix it up
+    Array.prototype.forEach.call(editing.querySelectorAll('span[style*="x-large"]'), function (sp) {
+      sp.style.fontSize = px + 'px';
+    });
+  }
+  // keep the selection when clicking the bar (but let the colour picker open)
+  fmtBar.addEventListener('mousedown', function (e) {
+    if (!e.target.closest('.fmt-color')) e.preventDefault();
+  });
+  fmtBar.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fmt]'); if (!b || !editing) return;
+    fmtBusy = true;
+    restoreSel();
+    try { document.execCommand('styleWithCSS', false, true); } catch (err) {}
+    var f = b.dataset.fmt;
+    if (f === 'bold' || f === 'italic' || f === 'underline') document.execCommand(f, false, null);
+    else if (f === 'clear') document.execCommand('removeFormat', false, null);
+    else if (f === 'bigger') applyFontSize(Math.min(96, Math.round(selectionFontSize() * 1.2)));
+    else if (f === 'smaller') applyFontSize(Math.max(6, Math.round(selectionFontSize() / 1.2)));
+    fmtBusy = false;
+    afterFmt();
+  });
+  var fmtColorEl = document.getElementById('fmtColor');
+  function applyColour() {
+    if (!editing) return;
+    fmtBusy = true;
+    restoreSel();
+    try { document.execCommand('styleWithCSS', false, true); } catch (err) {}
+    document.execCommand('foreColor', false, fmtColorEl.value);   // browser replaces, never nests
+    fmtBusy = false;
+    afterFmt();
+  }
+  fmtColorEl.addEventListener('input', applyColour);
+  fmtColorEl.addEventListener('change', applyColour);
+
+  /* Rich inline editor: type freely, Enter = new line, select any part ->
+     the format bar lets you make just that part bold / bigger / coloured. */
   function customById(id) {
     return (state.custom || []).filter(function (c) { return c.id === id; })[0];
   }
-  /* Rich inline editor: type freely, Enter = new line, select any part ->
-     the format bar lets you make just that part bold / bigger / coloured. */
   function caretToEnd(el) {
     try {
       var rg = document.createRange(); rg.selectNodeContents(el); rg.collapse(false);
