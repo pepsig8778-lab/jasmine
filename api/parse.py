@@ -39,12 +39,14 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         url = (q.get("url", [""])[0] or "").strip()
-        if "subito.it" not in url:
-            return self._send({"ok": False, "error": "ссылка должна быть subito.it"})
+        if not _subito.is_subito_url(url):
+            return self._send({"ok": False, "error": "ссылка должна быть subito.it"}, 400)
         try:
             return self._send({"ok": True, "data": _subito.fetch_data(url, opts_from_query(q))})
+        except ValueError as e:
+            return self._send({"ok": False, "error": str(e)}, 400)
         except Exception as e:  # noqa: BLE001
-            return self._send({"ok": False, "error": str(e)})
+            return self._send({"ok": False, "error": str(e)}, 502)
 
     def log_message(self, *a):
         pass

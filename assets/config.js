@@ -137,7 +137,8 @@ window.DEFAULT_CONFIG = {
     "radius": 0,
     "logo": "",
     "logoScale": 0.22,
-    "transparentBg": false
+    "transparentBg": false,
+    "linkOverride": ""
   },
   "layout": {
     "order": [

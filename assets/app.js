@@ -609,7 +609,15 @@
   /* ---- input handling -------------------------------------------------- */
   function coerce(input) {
     if (input.type === 'checkbox') return input.checked;
-    if (input.type === 'number' || input.type === 'range') return Number(input.value);
+    if (input.type === 'number' || input.type === 'range') {
+      var n = parseFloat(input.value);
+      var lo = input.min !== '' ? parseFloat(input.min) : null;
+      var hi = input.max !== '' ? parseFloat(input.max) : null;
+      if (!isFinite(n)) n = lo != null ? lo : 0;               // cleared field -> min, not 0
+      if (lo != null && n < lo) n = lo;
+      if (hi != null && n > hi) n = hi;
+      return n;
+    }
     return input.value;
   }
 
@@ -1112,7 +1120,7 @@
     ph.innerHTML = '<span class="big">⏳</span>Собираю данные объявления…<br>обычно 3–6 секунд' +
       '<br><small style="opacity:.6">(на бесплатном хостинге первый запрос после простоя — дольше)</small>';
     fetch('api/parse?url=' + encodeURIComponent(url)).then(function (r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
+      return r.json().catch(function () { throw new Error('HTTP ' + r.status); });
     }).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'parse error');
       lastListingData = res.data;
@@ -1131,7 +1139,8 @@
   /* Add custom elements: pick in the toolbar -> click on the template      */
   /* ===================================================================== */
   var ADD_LABELS = { text: 'Текст', box: 'Блок / карточка', image: 'Картинка',
-    row: 'Строка «цена»', btn: 'Кнопка', badge: 'Бейдж', info: 'Инфо-блок', line: 'Линия' };
+    row: 'Строка «цена»', btn: 'Кнопка', badge: 'Бейдж', info: 'Инфо-блок', line: 'Линия',
+    link: 'Ссылка' };
   var placing = null, selId = null;
 
   function setPlacing(type) {
@@ -1144,9 +1153,13 @@
 
   function addCustom(type, x, y) {
     state.custom = state.custom || [];
-    var d = (window.CUSTOM_DEFAULTS || {})[type] || {};
-    var c = { id: uid(), type: type, x: Math.max(0, x), y: Math.max(0, y) };
+    // "Ссылка" is just a text element carrying the {{link}} placeholder, so it
+    // can be dropped anywhere and styled like any other text.
+    var real = type === 'link' ? 'text' : type;
+    var d = (window.CUSTOM_DEFAULTS || {})[real] || {};
+    var c = { id: uid(), type: real, x: Math.max(0, x), y: Math.max(0, y) };
     Object.keys(d).forEach(function (k) { c[k] = d[k]; });
+    if (type === 'link') { c.text = '{{link}}'; c.color = '#1a73e8'; c.w = 300; c.size = 12; }
     markChange('Добавлен элемент: ' + ADD_LABELS[type]);
     state.custom.push(c);
     rebuildForm(); renderPreview(); selectCustom(c.id);
@@ -1500,6 +1513,25 @@
   document.getElementById('apiTpl').addEventListener('click', function () {
     download(JSON.stringify(state, null, 2), 'template.json', 'application/json');
     apiMsg('Положите template.json в корень репозитория и запушьте — шаблон переживёт перезапуск.');
+  });
+
+  /* ---- QR link override (lives in the template, so it sticks) ---------- */
+  var pQrLink = document.getElementById('pQrLink');
+  function qrLinkNote() {
+    var v = (state.qr && state.qr.linkOverride || '').trim();
+    document.getElementById('pQrLinkNote').textContent = v
+      ? '✓ QR ведёт сюда' : 'QR ведёт на объявление';
+  }
+  pQrLink.value = (state.qr && state.qr.linkOverride) || '';
+  qrLinkNote();
+  pQrLink.addEventListener('input', function () {
+    markChange('Ссылка для QR', 'qr.linkOverride');
+    state.qr = state.qr || {};
+    state.qr.linkOverride = this.value.trim();
+    persist(); qrLinkNote();
+    rebuildForm();
+    if (lastListingData) reapplyParser();      // live: re-point the QR right away
+    else renderPreview();
   });
 
   document.getElementById('pGo').addEventListener('click', parserLoad);

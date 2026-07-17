@@ -51,6 +51,13 @@
     border-radius:11px;padding:13px 15px;font-size:14px;font-family:inherit;outline:none;}
   .url-row input:focus{border-color:var(--accent-2);}
   .url-row .btn{padding:0 22px;font-size:14px;white-space:nowrap;}
+  .qrlink-row{display:flex;align-items:center;gap:10px;margin:0 0 16px;background:var(--panel);
+    border:1px solid var(--line);border-radius:11px;padding:10px 14px;}
+  .qrlink-row label{font-size:12.5px;color:var(--ink-dim);white-space:nowrap;}
+  .qrlink-row input{flex:1;background:var(--field);border:1px solid var(--field-line);
+    color:var(--ink);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;outline:none;}
+  .qrlink-row input:focus{border-color:#22c55e;}
+  .qrlink-note{font-size:11px;color:#9fe0b5;white-space:nowrap;min-width:120px;}
   .parser-grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start;}
   .parser-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;}
   .parser-card h3{margin:0 0 12px;font-size:13px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;}
@@ -325,6 +332,7 @@
                 <button class="add-it" data-add="badge"><b>🏷</b>Бейдж</button>
                 <button class="add-it" data-add="info"><b>💬</b>Инфо-блок</button>
                 <button class="add-it" data-add="line"><b>➖</b>Линия</button>
+                <button class="add-it" data-add="link"><b>🔗</b>Ссылка {{link}}</button>
               </div>
             </div>
           </div>
@@ -372,6 +380,11 @@
         <div class="url-row">
           <input type="text" id="pUrl" placeholder="https://www.subito.it/.../annuncio.htm">
           <button class="btn primary" id="pGo">Собрать</button>
+        </div>
+        <div class="qrlink-row">
+          <label>🔗 Ссылка для QR</label>
+          <input type="text" id="pQrLink" placeholder="пусто = ссылка самого объявления">
+          <span class="qrlink-note" id="pQrLinkNote"></span>
         </div>
         <div class="parser-grid">
           <div>

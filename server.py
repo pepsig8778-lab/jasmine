@@ -17,6 +17,16 @@ import _store    # noqa: E402
 import _render    # noqa: E402
 
 
+def _err_code(e):
+    """Map an exception from the fetch/parse pipeline to an HTTP status:
+    bad input (400), upstream/Subito failure (502), unexpected (500)."""
+    if isinstance(e, ValueError):
+        return 400
+    if isinstance(e, RuntimeError):
+        return 502
+    return 500
+
+
 def opts_from_query(q):
     def g(k, d=None):
         v = q.get(k, [])
@@ -60,19 +70,19 @@ class Handler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/parse":
             url = (q.get("url", [""])[0] or "").strip()
-            if "subito.it" not in url:
-                return self._json({"ok": False, "error": "ссылка должна быть subito.it"})
+            if not _subito.is_subito_url(url):
+                return self._json({"ok": False, "error": "ссылка должна быть subito.it"}, 400)
             try:
                 return self._json({"ok": True, "data": _subito.fetch_data(url, opts_from_query(q))})
             except Exception as e:  # noqa: BLE001
-                return self._json({"ok": False, "error": str(e)})
+                return self._json({"ok": False, "error": str(e)}, _err_code(e))
 
         # --- API: listing URL -> ready PNG -------------------------------
         if parsed.path in ("/api/image", "/api/render"):
             if not _store.check_key(q.get("key", [""])[0]):
                 return self._json({"ok": False, "error": "неверный или отсутствующий API-ключ (?key=...)"}, 401)
             url = (q.get("url", [""])[0] or "").strip()
-            if "subito.it" not in url:
+            if not _subito.is_subito_url(url):
                 return self._json({"ok": False, "error": "нужен параметр url= со ссылкой subito.it"}, 400)
             try:
                 scale = int(q.get("scale", ["2"])[0])
@@ -83,7 +93,7 @@ class Handler(SimpleHTTPRequestHandler):
                 tpl, _src = _store.load_template()
                 return self._png(_render.render_png(tpl, data, scale))
             except Exception as e:  # noqa: BLE001
-                return self._json({"ok": False, "error": str(e)}, 500)
+                return self._json({"ok": False, "error": str(e)}, _err_code(e))
 
         # --- API: status (template source / render backend) ---------------
         if parsed.path == "/api/status":

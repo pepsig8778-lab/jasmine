@@ -13,7 +13,7 @@ non-browser TLS fingerprints). The proxy also gives an Italian exit IP.
 Proxy is read from the SUBITO_PROXY env var, else from a `proxy.txt` file next to
 the project. Accepts either `http://user:pass@host:port` or `host:port:user:pass`.
 """
-import os, re, json, base64, io, subprocess, shutil
+import os, re, json, base64, io, subprocess, shutil, urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -74,6 +74,18 @@ def _syscurl_html(url):
         cmd += ["-x", px]
     out = subprocess.run(cmd + [url], capture_output=True)
     return out.stdout.decode("utf-8", "replace") if out.returncode == 0 and out.stdout else None
+
+
+def is_subito_url(url):
+    """True only if the URL's actual HOST is subito.it (or a subdomain).
+    A naive substring check like `"subito.it" in url` can be spoofed by
+    e.g. https://evil.example.com/x-1.htm?ref=subito.it — which would let
+    anyone tunnel arbitrary sites through our paid proxy."""
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == "subito.it" or host.endswith(".subito.it")
 
 
 def _listing_id(url):
@@ -247,6 +259,12 @@ def fetch_data(url, opts=None):
     o = dict(DEFAULTS)
     if opts:
         o.update({k: v for k, v in opts.items() if v is not None})
+
+    # Fail fast: without an ad id this can never be a listing, so don't burn
+    # ~30s of proxy retries before telling the user.
+    if not _listing_id(url):
+        raise ValueError("Это не ссылка на объявление. Нужен вид "
+                         ".../nome-annuncio-123456789.htm")
 
     html = fetch_html(url)                     # guaranteed to contain a Product card
     prod = extract_ldjson(html) or {}

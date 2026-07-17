@@ -54,7 +54,19 @@ def build_page(template, data):
 
 def canvas_size(template):
     c = (template or {}).get("canvas") or {}
-    return int(c.get("width", 418)), int(c.get("height", 826))
+    try:
+        w = int(c.get("width", 418))
+    except (TypeError, ValueError):
+        w = 418
+    try:
+        h = int(c.get("height", 826))
+    except (TypeError, ValueError):
+        h = 826
+    # A corrupted/hand-edited template (width<=0 etc.) would otherwise make Chrome
+    # fall back to its own default window size and silently return a wrong-size PNG.
+    w = w if 100 <= w <= 2000 else 418
+    h = h if 100 <= h <= 3000 else 826
+    return w, h
 
 
 def _render_playwright(html, w, h, scale):

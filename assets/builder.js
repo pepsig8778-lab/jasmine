@@ -198,7 +198,38 @@
     })(root);
     return root.innerHTML;
   }
-  var rich = sanitizeRich;
+  /* ----------------------------------------------------------------------- */
+  /* Placeholders: {{link}} & co. Put one in ANY text (custom element, row,   */
+  /* discount field...) and it is filled in at render/generation time — so a  */
+  /* link can live inside any block and be styled like normal text.           */
+  /* ----------------------------------------------------------------------- */
+  var TOKENS = {};
+  function buildTokens(cfg) {
+    var q = cfg.qr || {}, s = cfg.summary || {}, rows = s.rows || [];
+    function rowVal(re) {
+      for (var i = 0; i < rows.length; i++) if (re.test(rows[i].label || '')) return rows[i].value || '';
+      return '';
+    }
+    return {
+      link: q.linkOverride || q.data || '',      // what the QR points at
+      title: (s.product && s.product.title) || '',
+      price: rowVal(/oggett|item|prezzo|товар|цена/i),
+      shipping: rowVal(/spediz|shipping|достав/i),
+      protection: rowVal(/protezion|protection|защит/i),
+      total: (s.total && s.total.value) || ''
+    };
+  }
+  var TOKEN_RE = /\{\{\s*(\w+)\s*\}\}/g;
+  function applyTokens(v) {
+    var s = String(v == null ? '' : v);
+    if (s.indexOf('{{') < 0) return s;
+    // A raw {{token}} must never reach the exported "screenshot" — an unresolved
+    // token (no link pasted yet / unknown key) renders as blank, not literal syntax.
+    return s.replace(TOKEN_RE, function (m, k) {
+      return TOKENS[k] != null ? TOKENS[k] : '';
+    });
+  }
+  function rich(v) { return sanitizeRich(applyTokens(v)); }
 
   function isPlainObject(v) {
     return v && typeof v === 'object' && !Array.isArray(v);
@@ -344,7 +375,7 @@
   function buildDiscount(d) {
     if (!d) return '';
     var filled = d.value ? ' filled' : '';
-    var text = d.value ? esc(d.value) : esc(d.placeholder);
+    var text = d.value ? rich(d.value) : rich(d.placeholder);
     return '' +
       (d.title ? '<div class="sc-section-title mt" data-edit="discount.title">' + rich(d.title) + '</div>' : '') +
       '<div class="sc-discount' + filled + '" data-edit="discount.' + (d.value ? 'value' : 'placeholder') + '">' + text + '</div>';
@@ -352,12 +383,12 @@
 
   function buildOption(opt, theme) {
     var badge = opt.badge
-      ? '<span class="sc-opt-badge">' + esc(opt.badge) + '</span>' : '';
+      ? '<span class="sc-opt-badge">' + rich(opt.badge) + '</span>' : '';
     var btn = opt.button
       ? '<div class="sc-opt-btn">' + rich(opt.button) + '</div>' : '';
     var carrier = opt.carrier
       ? '<div class="sc-carrier">' + posteLogo(opt, theme) +
-        '<span class="sc-carrier-txt">' + esc(opt.carrier) + '</span></div>' : '';
+        '<span class="sc-carrier-txt">' + rich(opt.carrier) + '</span></div>' : '';
     return '<div class="sc-opt' + (opt.selected ? ' selected' : '') + '">' +
       badge +
       '<div class="sc-opt-row">' +
@@ -502,6 +533,7 @@
   }
 
   function renderScreenHTML(cfg) {
+    TOKENS = buildTokens(cfg);            // resolve {{link}} & co for this render
     var q = qrOn(cfg);
     var free = (cfg.layout && cfg.layout.free) || {};
 

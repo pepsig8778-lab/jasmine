@@ -74,7 +74,8 @@
     // QR: keep the template's style; custom stays, generated points at the listing
     if (cfg.qr) {
       if (cfg.qr.mode === 'custom') cfg.qr.image = cfg.qr.custom || cfg.qr.image || '';
-      else cfg.qr.data = data.url;
+      // a link pasted in the Parser (qr.linkOverride) wins over the listing URL
+      else cfg.qr.data = cfg.qr.linkOverride || data.url;
     }
     return cfg;
   }
