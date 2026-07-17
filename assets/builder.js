@@ -37,7 +37,7 @@
 
 /* ---- header ---- */
 '.sc-header{display:flex;align-items:center;gap:14px;height:52px;',
-'  padding:0 16px;background:#fff;}',
+'  padding:0 16px;background:var(--header-bg,var(--card));}',
 '.sc-close{width:21px;height:21px;color:var(--icon);flex:0 0 auto;cursor:default;}',
 '.sc-close svg{width:100%;height:100%;display:block;}',
 '.sc-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:.1px;}',
@@ -56,7 +56,7 @@
 /* ---- product ---- */
 '.sc-product{display:flex;align-items:center;gap:12px;}',
 '.sc-product-img{width:44px;height:44px;border-radius:6px;object-fit:cover;',
-'  flex:0 0 auto;background:#eceef2;border:1px solid rgba(0,0,0,.04);}',
+'  flex:0 0 auto;background:var(--img-bg,#eceef2);border:1px solid rgba(0,0,0,.04);}',
 '.sc-product-title{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.25;}',
 
 '.sc-divider{height:1px;background:var(--divider);margin:11px 0;}',
@@ -84,7 +84,7 @@
 
 /* ---- discount ---- */
 '.sc-discount{width:100%;height:42px;border:1px solid var(--input-border);',
-'  border-radius:22px;background:#fff;display:flex;align-items:center;',
+'  border-radius:22px;background:var(--input-bg,var(--card));display:flex;align-items:center;',
 '  padding:0 17px;font-size:14px;color:var(--placeholder);}',
 '.sc-discount.filled{color:var(--text);}',
 
@@ -103,7 +103,7 @@
 '.sc-opt-title{font-size:14px;font-weight:700;color:var(--text);}',
 '.sc-opt-price{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;}',
 '.sc-opt-btn{margin-top:9px;width:100%;height:34px;border:1px solid var(--btn-border);',
-'  border-radius:20px;background:#fff;color:var(--red);font-size:14px;font-weight:700;',
+'  border-radius:20px;background:var(--btn-bg,var(--card));color:var(--red);font-size:14px;font-weight:700;',
 '  display:flex;align-items:center;justify-content:center;cursor:default;}',
 '.sc-carrier{display:flex;align-items:center;gap:10px;margin-top:11px;}',
 '.sc-carrier-txt{font-size:13px;color:var(--muted);}',
@@ -123,14 +123,14 @@
 
 /* ---- QR code ---- */
 '.sc-qr-img{display:block;image-rendering:pixelated;image-rendering:crisp-edges;',
-'  border-radius:4px;background:#fff;}',
+'  border-radius:4px;background:var(--qr-img-bg,transparent);}',
 '.sc-qr-block{display:flex;align-items:center;gap:14px;background:var(--card);',
 '  border:1px solid var(--border);border-radius:12px;box-shadow:0 1px 2px rgba(24,39,75,.05);',
 '  padding:13px 14px;margin-top:15px;}',
 '.sc-qr-block .sc-qr-img{border:1px solid var(--divider);padding:3px;}',
 '.sc-qr-cap{font-size:13px;color:var(--muted);line-height:1.4;}',
 '.sc-qr-corner,.sc-qr-free{position:absolute;display:flex;flex-direction:column;align-items:center;',
-'  gap:4px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px;',
+'  gap:4px;background:var(--qr-card-bg,var(--card));border:1px solid var(--border);border-radius:8px;padding:6px;',
 '  box-shadow:0 3px 10px rgba(24,39,75,.14);}',
 '.sc-qr-free.bare{background:transparent;border:0;box-shadow:none;padding:0;}',
 '.sc-qr-corner .sc-qr-cap,.sc-qr-free .sc-qr-cap{font-size:9px;text-align:center;max-width:120px;line-height:1.15;}',
@@ -225,6 +225,12 @@
       '--opt-border': t.optBorder || t.divider,
       '--poste-yellow': t.posteYellow,
       '--poste-blue': t.posteBlue,
+      '--header-bg': t.headerBg,
+      '--input-bg': t.inputBg,
+      '--btn-bg': t.btnBg,
+      '--qr-card-bg': t.qrCardBg,
+      '--qr-img-bg': t.qrImgBg,
+      '--img-bg': t.imgBg,
       '--scrollbar-track': t.scrollbarTrack || t.pageBg,
       '--scrollbar-thumb': t.scrollbarThumb
     };

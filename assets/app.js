@@ -48,9 +48,71 @@
   }
   var state = loadState();
 
-  function persist() { lsSet(LS_KEY, JSON.stringify(state)); }
   function backupState() { return lsSet(LS_BACKUP, JSON.stringify(state)); }
   function hasBackup() { return !!lsGet(LS_BACKUP); }
+
+  /* ---- change journal (undo / redo by steps) --------------------------- */
+  var hist = [], histIdx = -1, restoring = false;
+  var pendingLabel = 'Изменение', pendingCoalesce = null, lastCK = null, lastT = 0;
+  var HIST_MAX = 80;
+
+  function markChange(label, coalesceKey) {   // handlers call this before rendering
+    pendingLabel = label || 'Изменение';
+    pendingCoalesce = coalesceKey || null;
+  }
+  function snapshot(label, ck) {
+    var json = JSON.stringify(state);
+    if (histIdx >= 0 && hist[histIdx].json === json) return;   // nothing actually changed
+    var now = Date.now();
+    if (ck && ck === lastCK && (now - lastT) < 900 && histIdx >= 0) {
+      hist[histIdx] = { json: json, label: label, t: now };     // coalesce fast typing
+    } else {
+      hist.length = histIdx + 1;                                // drop the redo tail
+      hist.push({ json: json, label: label, t: now });
+      histIdx = hist.length - 1;
+      if (hist.length > HIST_MAX) { hist.shift(); histIdx--; }
+    }
+    lastCK = ck; lastT = now;
+    updateHistUI();
+  }
+  function persist() {
+    lsSet(LS_KEY, JSON.stringify(state));
+    if (!restoring) snapshot(pendingLabel, pendingCoalesce);
+    pendingLabel = 'Изменение'; pendingCoalesce = null;
+  }
+  function restoreTo(i) {
+    if (i < 0 || i >= hist.length || i === histIdx) return;
+    restoring = true;
+    histIdx = i;
+    state = JSON.parse(hist[i].json);
+    genQR().then(function () {
+      rebuildForm(); renderPreview();
+      restoring = false; updateHistUI(); updateRestoreBtn();
+    });
+  }
+  function undo() { if (histIdx > 0) { restoreTo(histIdx - 1); flash('Отменено: ' + hist[histIdx].label); } }
+  function redo() { if (histIdx < hist.length - 1) restoreTo(histIdx + 1); }
+
+  function agoStr(t) {
+    var s = Math.round((Date.now() - t) / 1000);
+    if (s < 60) return s + ' с';
+    if (s < 3600) return Math.round(s / 60) + ' мин';
+    return Math.round(s / 3600) + ' ч';
+  }
+  function updateHistUI() {
+    var u = document.getElementById('undoBtn'), r = document.getElementById('redoBtn');
+    if (u) u.disabled = histIdx <= 0;
+    if (r) r.disabled = histIdx >= hist.length - 1;
+    var m = document.getElementById('histMenu');
+    if (!m || !m.classList.contains('open')) return;
+    var rows = '';
+    for (var i = hist.length - 1; i >= 0; i--) {                // newest first
+      rows += '<div class="hist-item' + (i === histIdx ? ' now' : (i > histIdx ? ' future' : '')) +
+        '" data-hist="' + i + '"><span class="lbl">' + (i === histIdx ? '● ' : '') +
+        esc(hist[i].label) + '</span><span class="t">' + agoStr(hist[i].t) + '</span></div>';
+    }
+    m.innerHTML = '<div class="hh">Журнал изменений — кликните, чтобы вернуться</div>' + rows;
+  }
 
   /* ---- DOM refs -------------------------------------------------------- */
   var preview = document.getElementById('preview');
@@ -313,7 +375,10 @@
       fColor('Placeholder', 'theme.placeholder'), fColor('Рамка кнопки', 'theme.btnBorder'),
       fColor('Рамка выбранного', 'theme.selectedBorder'), fColor('Рамка опции', 'theme.optBorder'),
       fColor('Жёлтый Poste', 'theme.posteYellow'), fColor('Синий Poste', 'theme.posteBlue'),
-      fColor('Полоса прокрутки', 'theme.scrollbarThumb')
+      fColor('Полоса прокрутки', 'theme.scrollbarThumb'),
+      fColor('Фон шапки', 'theme.headerBg'), fColor('Фон поля промокода', 'theme.inputBg'),
+      fColor('Фон кнопки', 'theme.btnBg'), fColor('Фон карточки QR', 'theme.qrCardBg'),
+      fColor('Подложка фото', 'theme.imgBg')
     ].join('');
 
     var frame =
@@ -411,9 +476,27 @@
     return !QR_DISPLAY_ONLY[path.slice(3)];
   }
 
+  /* human label for the journal, from a data-path */
+  var FIELD_LABELS = {
+    'header.title': 'заголовок шапки', 'summary.product.title': 'название товара',
+    'summary.total.value': 'сумма «Итого»', 'summary.total.label': 'подпись «Итого»',
+    'discount.value': 'промокод', 'qr.data': 'данные QR', 'qr.caption': 'подпись QR',
+    'canvas.width': 'ширина', 'canvas.height': 'высота'
+  };
+  function pathLabel(p) {
+    if (FIELD_LABELS[p]) return FIELD_LABELS[p];
+    if (/\.show$/.test(p)) return 'раздел «' + (SECTION_LABELS[p.split('.')[0]] || p.split('.')[0]) + '»';
+    if (p.indexOf('theme.') === 0) return 'цвет/стиль';
+    if (p.indexOf('qr.') === 0) return 'QR: ' + p.slice(3);
+    if (/summary\.rows\.\d+\.(label|value)/.test(p)) return 'строка суммы';
+    if (/shipping\.options\.\d+\./.test(p)) return 'опция доставки';
+    return p;
+  }
+
   controls.addEventListener('input', function (e) {
     var t = e.target;
     if (!t.dataset.path) return;
+    markChange('Правка: ' + pathLabel(t.dataset.path), t.dataset.path);
     setPath(state, t.dataset.path, coerce(t));
     // keep hex<->color pickers and range labels in sync without full rebuild
     if (t.type === 'color' || t.classList.contains('hex')) {
@@ -432,6 +515,7 @@
   controls.addEventListener('change', function (e) {
     var t = e.target;
     if (t.dataset.select && t.dataset.path) {          // <select>
+      markChange('Выбрано: ' + pathLabel(t.dataset.path));
       setPath(state, t.dataset.path, t.value);
       if (t.dataset.path === 'qr.gradient') { afterQR(); return; }   // show/hide grad fields
       if (qrNeedsRegen(t.dataset.path)) { genQR().then(renderPreview); return; }
@@ -440,6 +524,7 @@
       return;
     }
     if (t.type === 'checkbox' && t.dataset.path) {
+      markChange((t.checked ? 'Включено: ' : 'Выключено: ') + pathLabel(t.dataset.path));
       setPath(state, t.dataset.path, t.checked);
       if (t.dataset.path === 'qr.show' && t.checked && state.qr && state.qr.data && !state.qr.image) {
         afterQR(); return;
@@ -453,6 +538,7 @@
       var r = new FileReader();
       var path = t.dataset.file;
       r.onload = function () {
+        markChange('Загружено изображение: ' + pathLabel(path));
         setPath(state, path, r.result);
         if (path === 'qr.custom') { state.qr.mode = 'custom'; }
         if (path.slice(0, 3) === 'qr.') { afterQR(); }
@@ -462,10 +548,19 @@
     }
   });
 
+  var ACT_LABELS = {
+    addRow: 'Добавлена строка', delRow: 'Удалена строка',
+    addOpt: 'Добавлена опция', delOpt: 'Удалена опция',
+    clear: 'Очищено поле', up: 'Порядок ↑', down: 'Порядок ↓',
+    toggleFree: 'Свободное размещение', resetLayout: 'Сброс раскладки',
+    qrRegen: 'QR обновлён', qrpill: 'Стиль QR', qrPreset: 'Пресет QR',
+    qrMode: 'Режим QR', qrPos: 'Позиция QR'
+  };
   controls.addEventListener('click', function (e) {
     var b = e.target.closest('[data-act]');
     if (!b) return;
     var act = b.dataset.act;
+    markChange(ACT_LABELS[act] || 'Действие');
     if (act === 'addRow') {
       state.summary.rows.push({ label: 'Nuova voce', value: '0,00 €', info: false, muted: false });
     } else if (act === 'delRow') {
@@ -573,8 +668,31 @@
 
   function bind(id, fn) { var e = document.getElementById(id); if (e) e.addEventListener('click', fn); }
 
+  bind('undoBtn', undo);
+  bind('redoBtn', redo);
+  bind('histBtn', function () {
+    var m = document.getElementById('histMenu');
+    m.classList.toggle('open'); updateHistUI();
+  });
+  document.getElementById('histMenu').addEventListener('click', function (e) {
+    var it = e.target.closest('[data-hist]');
+    if (it) { restoreTo(Number(it.dataset.hist)); this.classList.remove('open'); }
+  });
+  document.addEventListener('click', function (e) {          // close on outside click
+    if (!e.target.closest('.hist-wrap')) {
+      var m = document.getElementById('histMenu');
+      if (m) m.classList.remove('open');
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = (e.key || '').toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo(); }
+  });
+
   bind('fitBtn', function () {
-    if (fitNeed > 0) { state.canvas.height = fitNeed; rebuildForm(); renderPreview(); flash('Высота подогнана: ' + fitNeed + 'px'); }
+    if (fitNeed > 0) { markChange('Подогнана высота'); state.canvas.height = fitNeed; rebuildForm(); renderPreview(); flash('Высота подогнана: ' + fitNeed + 'px'); }
   });
   bind('zoomIn', function () { zoom = Math.min(2, zoom + 0.1); renderPreview(); });
   bind('zoomOut', function () { zoom = Math.max(0.4, zoom - 0.1); renderPreview(); });
@@ -600,7 +718,7 @@
       try {
         var cfg = JSON.parse(r.result);
         state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg);
-        rebuildForm(); renderPreview(); flash('Конфиг импортирован');
+        markChange('Импорт JSON'); rebuildForm(); renderPreview(); flash('Конфиг импортирован');
       } catch (err) { alert('Неверный JSON: ' + err.message); }
     };
     r.readAsText(f); e.target.value = '';
@@ -613,7 +731,7 @@
     if (!confirm('Сбросить шаблон к исходному виду?\n\n' +
                  'Текущие настройки сохранятся в резервную копию — их можно вернуть ' +
                  'кнопкой «Восстановить».')) return;
-    backupState();
+    backupState(); markChange('Сброс шаблона');
     state = clone(window.DEFAULT_CONFIG);
     rebuildForm(); renderPreview(); updateRestoreBtn();
     flash('Сброшено — можно вернуть кнопкой «Восстановить»');
@@ -669,7 +787,7 @@
     function end() {
       if (!drag) return;
       var cfg = getCfg();
-      if (drag._x != null && cfg.qr) { cfg.qr.x = drag._x; cfg.qr.y = drag._y; }
+      if (drag._x != null && cfg.qr) { markChange('Перемещён QR'); cfg.qr.x = drag._x; cfg.qr.y = drag._y; }
       drag = null; onEnd();
     }
     el.addEventListener('pointerup', end);
@@ -717,6 +835,7 @@
     function end() {
       if (!drag) return;
       if (drag._x != null) {
+        markChange('Перемещён блок: ' + (SECTION_LABELS[drag.key] || drag.key));
         var cfg = getCfg();
         cfg.layout = cfg.layout || { order: ['summary', 'discount', 'shipping'] };
         cfg.layout.free = cfg.layout.free || {};
@@ -902,8 +1021,9 @@
   /* ---- console / automation API --------------------------------------- */
   window.Builder = {
     get: function () { return clone(state); },
-    set: function (cfg) { state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg); return genQR().then(function () { rebuildForm(); renderPreview(); }); },
+    set: function (cfg) { markChange('Загружен конфиг'); state = window.mergeConfig(clone(window.DEFAULT_CONFIG), cfg); return genQR().then(function () { rebuildForm(); renderPreview(); }); },
     patch: function (path, val) {
+      markChange('Правка: ' + pathLabel(path), path);
       setPath(state, path, val);
       if (qrNeedsRegen(path)) return genQR().then(function () { rebuildForm(); renderPreview(); });
       rebuildForm(); renderPreview();
@@ -914,6 +1034,7 @@
 
   /* ---- boot ------------------------------------------------------------ */
   buildForm();
+  markChange('Начальное состояние');
   renderPreview();
   renderParserOpts();
   updateRestoreBtn();

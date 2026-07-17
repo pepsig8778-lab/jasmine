@@ -29,7 +29,12 @@ window.DEFAULT_CONFIG = {
     "posteYellow": "#ffdd00",
     "posteBlue": "#002d72",
     "scrollbarTrack": "#f4f6fa",
-    "scrollbarThumb": "#9aa1aa"
+    "scrollbarThumb": "#9aa1aa",
+    "headerBg": "#ffffff",
+    "inputBg": "#ffffff",
+    "btnBg": "#ffffff",
+    "qrCardBg": "#ffffff",
+    "imgBg": "#eceef2"
   },
   "header": {
     "title": "Acquista a distanza",
