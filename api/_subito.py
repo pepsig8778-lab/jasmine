@@ -144,11 +144,14 @@ def _listing_id(url):
 
 
 def _is_right_page(html, lid):
-    """A valid listing page must have a Product card AND reference this exact ad id
-    (guards against redirects to home/search or a wrong cached page)."""
-    if not extract_ldjson(html):
+    """A valid listing page must reference THIS ad id and look like a real
+    listing — either a Product card (goods) or the universal listing signal
+    (rentals/real-estate/etc. that have no Product schema). This guards against
+    Akamai soft-blocks and redirects to home/search while still accepting every
+    listing category."""
+    if lid is not None and lid not in html:
         return False
-    return (lid is None) or (lid in html)
+    return bool(extract_ldjson(html)) or _listing_signal(html)
 
 
 def fetch_html(url):
@@ -230,6 +233,31 @@ def extract_ldjson(html):
 def meta(html, prop):
     m = re.search(r'<meta property="%s" content="([^"]*)"' % re.escape(prop), html)
     return m.group(1) if m else None
+
+
+# Not every Subito listing is a schema.org "Product": rentals / real-estate
+# (case-vacanza, appartamenti, ...) have NO Product LD-JSON. Their price lives
+# in the page's embedded (escaped-JSON) data layer, under the "/price" feature.
+# This regex tolerates any amount of quote-escaping (\" or \\").
+_PRICE_FEATURE_RE = re.compile(r'[\\]*"/price[\\]*".{0,400}?[\\]*"key[\\]*"\s*:\s*[\\]*"(\d[\d.]*)')
+
+
+def price_from_features(html):
+    m = _PRICE_FEATURE_RE.search(html)
+    if not m:
+        return None
+    try:
+        return float(m.group(1).replace(".", ""))   # "1.300" / "1300" -> 1300.0
+    except ValueError:
+        return None
+
+
+def _listing_signal(html):
+    """A real listing page of ANY category carries a genuine Subito og:image;
+    an Akamai soft-block page does not. Used so non-Product listings are still
+    recognised as valid (instead of being retried forever as 'wrong page')."""
+    ogi = meta(html, "og:image") or ""
+    return ("sbito" in ogi or "subito" in ogi) and bool(meta(html, "og:title"))
 
 
 def eur(x):
@@ -341,12 +369,16 @@ def fetch_data(url, opts=None):
         raw = dict(hit[1]) if hit and time.time() - hit[0] < _DATA_TTL else None
 
     if raw is None:
-        html = fetch_html(url)                 # guaranteed to contain a Product card
+        html = fetch_html(url)                 # a real listing page of any category
         prod = extract_ldjson(html) or {}
         name = (prod.get("name") or meta(html, "og:title") or "Annuncio")
         name = re.sub(r"\s*\|\s*Subito\s*$", "", name).strip()
 
-        price = price_of(prod)                  # ONLY from the product's own offer
+        # Goods carry the price in their Product offer; rentals/real-estate and
+        # other non-Product categories only in the page's "/price" feature.
+        price = price_of(prod)
+        if price is None:
+            price = price_from_features(html)
         if price is None:
             price = 0.0                         # free/"Regalo" listing — not a random number
 
