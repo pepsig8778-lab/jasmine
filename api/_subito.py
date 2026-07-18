@@ -13,7 +13,7 @@ non-browser TLS fingerprints). The proxy also gives an Italian exit IP.
 Proxy is read from the SUBITO_PROXY env var, else from a `proxy.txt` file next to
 the project. Accepts either `http://user:pass@host:port` or `host:port:user:pass`.
 """
-import os, re, json, base64, io, subprocess, shutil, urllib.parse
+import os, re, json, base64, io, time, threading, subprocess, shutil, urllib.parse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -64,6 +64,42 @@ def _cffi():
         return creq
     except ImportError:
         return None
+
+
+# Profiled on live listings: a FRESH proxied request costs 3.5-4.6s, of which
+# ~3s is connect + TLS to the proxy + tunnel TLS to Subito; the SAME session
+# reused answers in 1.0-1.3s. So keep a small pool of warm sessions. A reused
+# session keeps its (sticky) exit IP — exactly what we want while it works;
+# when a request fails or gets an Akamai soft-block we DISCARD that session,
+# so the retry builds a fresh one and lands on a new exit IP (the old
+# rotate-on-retry behaviour, now paying the handshake only when needed).
+_POOL, _POOL_LOCK, _POOL_MAX = [], threading.Lock(), 4
+
+
+def _borrow_session():
+    with _POOL_LOCK:
+        if _POOL:
+            return _POOL.pop()
+    creq = _cffi()
+    return creq.Session(impersonate="chrome") if creq else None
+
+
+def _return_session(s):
+    with _POOL_LOCK:
+        if len(_POOL) < _POOL_MAX:
+            _POOL.append(s)
+            return
+    try:
+        s.close()
+    except Exception:                   # noqa: BLE001
+        pass
+
+
+def _discard_session(s):
+    try:
+        s.close()
+    except Exception:                   # noqa: BLE001
+        pass
 
 
 def _syscurl_html(url):
@@ -125,19 +161,25 @@ def fetch_html(url):
     lid = _listing_id(url)
     last = "нет данных"
     for _ in range(RETRIES):
-        try:
-            if creq:
-                r = creq.get(url, proxies=proxies, impersonate="chrome", timeout=TIMEOUT)
+        if creq:
+            s = _borrow_session()
+            try:
+                r = s.get(url, proxies=proxies, timeout=TIMEOUT)
                 if r.status_code == 200 and _is_right_page(r.text, lid):
+                    _return_session(s)          # warm session -> next parse ~1s
                     return r.text
                 last = "HTTP %s" % r.status_code if r.status_code != 200 else "не то объявление/блок"
-            else:
+            except Exception as e:      # noqa: BLE001  (rotate & retry)
+                last = type(e).__name__
+            _discard_session(s)                 # bad exit IP -> retry gets a fresh one
+        else:
+            try:
                 txt = _syscurl_html(url)
                 if txt and _is_right_page(txt, lid):
                     return txt
                 last = "не то объявление/блок"
-        except Exception as e:          # noqa: BLE001  (rotate & retry)
-            last = type(e).__name__
+            except Exception as e:      # noqa: BLE001
+                last = type(e).__name__
     raise RuntimeError("Subito не отдал объявление (%s). Нажмите «Собрать» ещё раз." % last)
 
 
@@ -262,6 +304,8 @@ def qr_datauri(text):
     return "data:image/png;base64,%s" % base64.b64encode(buf.getvalue()).decode()
 
 
+_DATA_CACHE, _DATA_CACHE_LOCK, _DATA_TTL = {}, threading.Lock(), 300
+
 DEFAULTS = {"qr": "corner", "caption": "Inquadra per aprire l'annuncio",
             "ship_pickup": "2,39", "ship_home": "5,99",
             "prot_fixed": 1.20, "prot_rate1": 0.05, "prot_rate2": 0.045, "prot_cap": 51.0}
@@ -277,29 +321,43 @@ def fetch_data(url, opts=None):
     url = normalize_url(url)
     # Fail fast: without an ad id this can never be a listing, so don't burn
     # ~30s of proxy retries before telling the user.
-    if not _listing_id(url):
+    lid = _listing_id(url)
+    if not lid:
         raise ValueError("Это ссылка на subito.it, но не на объявление. Откройте "
                          "сам товар и скопируйте адрес — он оканчивается на "
                          "-1234567890.htm")
 
-    html = fetch_html(url)                     # guaranteed to contain a Product card
-    prod = extract_ldjson(html) or {}
-    name = (prod.get("name") or meta(html, "og:title") or "Annuncio")
-    name = re.sub(r"\s*\|\s*Subito\s*$", "", name).strip()
+    # Short TTL cache of the listing FACTS only (title/price/image) — a repeat
+    # of the same link (re-pressing «Собрать», API retries, url+qrUrl variants)
+    # answers instantly instead of re-fetching through the proxy. Protezione
+    # and shipping are derived below per-request because opts can differ.
+    with _DATA_CACHE_LOCK:
+        hit = _DATA_CACHE.get(lid)
+        raw = dict(hit[1]) if hit and time.time() - hit[0] < _DATA_TTL else None
 
-    price = price_of(prod)                      # ONLY from the product's own offer
-    if price is None:
-        price = 0.0                             # free/"Regalo" listing — not a random number
+    if raw is None:
+        html = fetch_html(url)                 # guaranteed to contain a Product card
+        prod = extract_ldjson(html) or {}
+        name = (prod.get("name") or meta(html, "og:title") or "Annuncio")
+        name = re.sub(r"\s*\|\s*Subito\s*$", "", name).strip()
 
-    img = prod.get("image")
-    img_url = (img[0] if isinstance(img, list) else img) or meta(html, "og:image")
+        price = price_of(prod)                  # ONLY from the product's own offer
+        if price is None:
+            price = 0.0                         # free/"Regalo" listing — not a random number
 
-    prot = protezione(price, o)
-    return {
-        "url": url, "title": name, "price": price, "protezione": prot,
-        "image": image_datauri(img_url) if img_url else "",
-        "ship_pickup": parse_price_num(o["ship_pickup"]),
-    }
+        img = prod.get("image")
+        img_url = (img[0] if isinstance(img, list) else img) or meta(html, "og:image")
+        raw = {"url": url, "title": name, "price": price,
+               "image": image_datauri(img_url) if img_url else ""}
+        with _DATA_CACHE_LOCK:
+            _DATA_CACHE[lid] = (time.time(), dict(raw))
+            if len(_DATA_CACHE) > 200:          # bound memory on long-lived hosts
+                oldest = min(_DATA_CACHE, key=lambda k: _DATA_CACHE[k][0])
+                del _DATA_CACHE[oldest]
+
+    raw["protezione"] = protezione(raw["price"], o)
+    raw["ship_pickup"] = parse_price_num(o["ship_pickup"])
+    return raw
 
 
 def build_config(url, opts=None):
