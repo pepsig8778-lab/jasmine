@@ -7,7 +7,7 @@ Cloud:  runs on 0.0.0.0:$PORT when the PORT env var is set (Render/Railway/Fly).
 
 Parsing goes through the proxy (see api/_subito.py + SUBITO_PROXY / proxy.txt).
 """
-import sys, os, json, urllib.parse, functools
+import sys, os, json, time, threading, urllib.parse, functools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +20,24 @@ import _render    # noqa: E402
 # unlike the client IP, which a reverse proxy rewrites to 127.0.0.1 and would
 # fool a localhost check into leaking the API key over the internet.
 IS_CLOUD = bool(os.environ.get("PORT"))
+
+
+def _keep_warm():
+    """Free hosts spin the service down after a few minutes idle, so the next
+    request pays a ~50s cold start. Ping our own public URL periodically to
+    keep the instance awake (Render exposes it as RENDER_EXTERNAL_URL). Uses
+    ~always-on free hours — fine for a single service."""
+    base = (os.environ.get("RENDER_EXTERNAL_URL")
+            or os.environ.get("EXTERNAL_URL") or "").rstrip("/")
+    if not base:
+        return
+    import urllib.request
+    while True:
+        time.sleep(600)                        # every 10 min
+        try:
+            urllib.request.urlopen(base + "/", timeout=20).read(64)
+        except Exception:                      # noqa: BLE001
+            pass
 
 
 def _err_code(e):
@@ -174,6 +192,9 @@ def main():
     print("API парсера:  /api/parse?url=<subito-url>")
     print("Прокси:       %s" % ("настроен" if _subito.proxy_url() else "НЕ настроен"))
     print("(Ctrl+C чтобы остановить)")
+    _render.warmup()                   # launch the render browser ahead of the 1st request
+    if IS_CLOUD:
+        threading.Thread(target=_keep_warm, daemon=True).start()   # don't fall asleep
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

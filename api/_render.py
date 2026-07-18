@@ -131,6 +131,10 @@ def _worker_loop():
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = None
+        try:
+            browser = _launch_browser(p)       # eager: warm before the 1st job
+        except Exception:                      # noqa: BLE001
+            browser = None                     # will launch lazily on first job
         while True:
             html, w, h, scale, reply = _JOB_Q.get()
             try:
@@ -166,6 +170,17 @@ def _ensure_worker():
         _ensure_playwright_browser()           # install the binary if missing
         _WORKER = threading.Thread(target=_worker_loop, daemon=True)
         _WORKER.start()
+
+
+def warmup():
+    """Start the render worker (and launch the browser) ahead of the first
+    request, so once the service is awake the first render is fast too. Safe to
+    call at server startup; a no-op without Playwright (local dev)."""
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        return
+    threading.Thread(target=_ensure_worker, daemon=True).start()
 
 
 def _render_playwright(html, w, h, scale):
