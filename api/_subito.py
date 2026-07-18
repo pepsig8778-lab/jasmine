@@ -160,7 +160,12 @@ def fetch_html(url):
     proxies = {"http": px, "https": px} if px else None
     lid = _listing_id(url)
     last = "нет данных"
-    for _ in range(RETRIES):
+    for attempt in range(RETRIES):
+        if attempt:
+            # Brief pause before a retry: lets the rotating proxy hand out a
+            # fresh exit IP and lets a transient Akamai soft-block clear, instead
+            # of hammering the same blocked state back-to-back.
+            time.sleep(min(0.4 * attempt, 1.5))
         if creq:
             s = _borrow_session()
             try:

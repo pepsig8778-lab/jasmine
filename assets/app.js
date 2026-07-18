@@ -1146,23 +1146,35 @@
     var ph = document.getElementById('pPlaceholder');
     var el = document.getElementById('parserPreview');
     el.style.display = 'none'; ph.style.display = 'block';
-    ph.innerHTML = '<span class="spin"></span><br>Собираю данные объявления…<br>обычно 1–6 секунд' +
-      '<br><small style="opacity:.6">(на бесплатном хостинге первый запрос после простоя — дольше)</small>';
-    fetch('api/parse?url=' + encodeURIComponent(url)).then(function (r) {
-      return r.json().catch(function () { throw new Error('HTTP ' + r.status); });
-    }).then(function (res) {
-      if (!res.ok) throw new Error(res.error || 'parse error');
-      lastListingData = res.data;
-      parserState = applyListingData(state, res.data);
-      return renderQR(parserState.qr).then(function () {
-        renderParserOpts(); parserRender();
-        flash('Готово: ' + (res.data.title || ''));
+
+    // A soft-block from Subito is transient — retry a couple of times on our
+    // own before bothering the user, so the odd blocked proxy IP is invisible.
+    var MAX_TRIES = 3;
+    function attempt(n) {
+      ph.innerHTML = '<span class="spin"></span><br>Собираю данные объявления…' +
+        (n > 1 ? '<br>попытка ' + n + ' из ' + MAX_TRIES : '<br>обычно 1–6 секунд') +
+        '<br><small style="opacity:.6">(первый запрос после простоя — дольше)</small>';
+      return fetch('api/parse?url=' + encodeURIComponent(url)).then(function (r) {
+        return r.json().catch(function () { throw new Error('HTTP ' + r.status); });
+      }).then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'parse error');
+        lastListingData = res.data;
+        parserState = applyListingData(state, res.data);
+        return renderQR(parserState.qr).then(function () {
+          renderParserOpts(); parserRender();
+          flash('Готово: ' + (res.data.title || ''));
+        });
+      }).catch(function (err) {
+        // retry only the transient "soft-block" case, not bad-link/other errors
+        if (n < MAX_TRIES && /не отдал|не то объявление|HTTP 5/i.test(err.message)) {
+          return new Promise(function (r) { setTimeout(r, 1200); }).then(function () { return attempt(n + 1); });
+        }
+        ph.innerHTML = '<span class="big">⚠️</span>' + esc(err.message) +
+          '<br><small style="opacity:.7">Попробуйте ещё раз или проверьте ссылку.</small>';
+        flash('Ошибка: ' + err.message);
       });
-    }).catch(function (err) {
-      ph.innerHTML = '<span class="big">⚠️</span>' + esc(err.message) +
-        '<br><small style="opacity:.7">Нажмите «Собрать» ещё раз.</small>';
-      flash('Ошибка: ' + err.message);
-    }).then(function () { go.disabled = false; go.textContent = 'Собрать'; });
+    }
+    attempt(1).then(function () { go.disabled = false; go.textContent = 'Собрать'; });
   }
   /* ===================================================================== */
   /* Add custom elements: pick in the toolbar -> click on the template      */
