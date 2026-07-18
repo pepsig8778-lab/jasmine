@@ -30,7 +30,9 @@ def _asset(name):
 
 
 def build_page(template, data):
-    """Self-contained HTML that renders the final screen and sets title=READY."""
+    """Self-contained HTML that renders the final screen and sets title=READY.
+    Used only by the system-Chrome fallback (local dev). The Playwright path
+    uses a persistent page + _HARNESS instead (see _worker_loop)."""
     return (
         '<!doctype html><html><head><meta charset="utf-8"></head>'
         '<body style="margin:0;background:#fff"><div class="screen" id="screen"></div>'
@@ -50,6 +52,65 @@ def build_page(template, data):
         '});'
         '</script></body></html>'
     )
+
+
+_HARNESS = None
+
+
+def _harness_html():
+    """A page loaded ONCE per Playwright page: the engine JS is parsed a single
+    time, then window.__render(template,data) renders any request into #screen
+    and resolves when the paint (incl. QR) is done. Rendering thus skips the
+    ~200KB re-parse that set_content paid on every request."""
+    global _HARNESS
+    if _HARNESS is None:
+        _HARNESS = (
+            '<!doctype html><html><head><meta charset="utf-8"></head>'
+            '<body style="margin:0;background:#fff"><div class="screen" id="screen"></div>'
+            '<script>' + _asset("config.js") + '</script>'
+            '<script>' + _asset("builder.js") + '</script>'
+            '<script>' + _asset("qr.js") + '</script>'
+            '<script>' + _asset("apply.js") + '</script>'
+            '<script>'
+            'var st=document.createElement("style");st.textContent=window.SCREEN_CSS;'
+            'document.head.appendChild(st);'
+            # __render MUST always settle: there is ONE worker thread and
+            # page.evaluate has no timeout, so a promise that stays pending
+            # would wedge the worker forever. Hence: a single linear chain
+            # ending in .catch(fail), plus an in-page watchdog.
+            'window.__render=function(template,data){'
+            '  return new Promise(function(resolve,reject){'
+            '    var settled=false,wd=null;'
+            '    function done(v){if(settled)return;settled=true;if(wd)clearTimeout(wd);resolve(v);}'
+            '    function fail(e){if(settled)return;settled=true;if(wd)clearTimeout(wd);reject(String(e&&e.message||e));}'
+            '    wd=setTimeout(function(){fail("render timeout");},10000);'
+            '    try{'
+            '      var tpl=window.mergeConfig(window.DEFAULT_CONFIG,template||{});'
+            '      var cfg=data?window.SubitoApply.applyListingData(tpl,data):tpl;'
+            '      var el=document.getElementById("screen");'
+            '      Promise.resolve(window.SubitoApply.renderQR(cfg.qr)).then(function(){'
+            '        window.renderScreen(el,cfg);'
+            # renderScreen only sets innerHTML — the <img> elements (product
+            # photo, QR data-URI, carrier logo) decode ASYNCHRONOUSLY. Capturing
+            # before they paint yields a blank/previous-frame image. Wait for
+            # decode, but BOUND it (3s) so a slow remote custom image can't stall.
+            '        var imgs=[].slice.call(el.querySelectorAll("img"));'
+            '        var dec=Promise.all(imgs.map(function(i){'
+            '          if(i.complete&&i.naturalWidth>0)return 0;'
+            '          return (i.decode?i.decode():Promise.resolve()).catch(function(){});'
+            '        }));'
+            '        return Promise.race([dec,new Promise(function(r){setTimeout(r,3000);})]);'
+            '      }).then(function(){'
+            '        requestAnimationFrame(function(){requestAnimationFrame(function(){'
+            '          done({w:(cfg.canvas&&cfg.canvas.width)||418,h:(cfg.canvas&&cfg.canvas.height)||826});'
+            '        });});'
+            '      }).catch(fail);'
+            '    }catch(e){fail(e);}'
+            '  });'
+            '};'
+            '</script></body></html>'
+        )
+    return _HARNESS
 
 
 def canvas_size(template):
@@ -127,47 +188,79 @@ def _launch_browser(p):
     raise last
 
 
+_PAGE_RECYCLE = 300                            # rebuild a page after N renders (bound memory)
+
+
 def _worker_loop():
+    _ensure_playwright_browser()               # install here — off the request path
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = None
+        pages = {}                             # scale -> [page, render_count]
         try:
             browser = _launch_browser(p)       # eager: warm before the 1st job
         except Exception:                      # noqa: BLE001
             browser = None                     # will launch lazily on first job
+
+        def new_page(scale):
+            pg = browser.new_page(viewport={"width": 480, "height": 900},
+                                  device_scale_factor=scale)
+            pg.set_content(_harness_html(), wait_until="load")
+            pg.wait_for_function("typeof window.__render==='function'", timeout=15000)
+            return pg
+
+        def get_page(scale):
+            slot = pages.get(scale)
+            pg = slot[0] if slot else None
+            try:
+                dead = pg is None or pg.is_closed() or slot[1] >= _PAGE_RECYCLE
+            except Exception:                  # noqa: BLE001
+                dead = True
+            if dead:
+                try:
+                    if pg is not None:
+                        pg.close()             # recycle: free the churned DOM/data-URLs
+                except Exception:              # noqa: BLE001
+                    pass
+                pg = new_page(scale)
+                pages[scale] = [pg, 0]
+            return pages[scale]
+
         while True:
-            html, w, h, scale, reply = _JOB_Q.get()
+            template, data, w, h, scale, reply = _JOB_Q.get()
             try:
                 if browser is None or not browser.is_connected():
                     browser = _launch_browser(p)
-                pg = browser.new_page(viewport={"width": w, "height": h + 80},
-                                      device_scale_factor=scale)
-                try:
-                    pg.set_content(html, wait_until="load")
-                    try:
-                        pg.wait_for_function("document.title==='READY'", timeout=15000)
-                    except Exception:
-                        pass
-                    png = pg.screenshot(clip={"x": 0, "y": 0, "width": w, "height": h})
-                finally:
-                    pg.close()
+                    pages = {}                 # stale pages belonged to the dead browser
+                slot = get_page(scale)
+                pg = slot[0]
+                pg.set_viewport_size({"width": max(int(w), 100), "height": max(int(h) + 40, 100)})
+                # __render always settles (linear chain + in-page watchdog), so
+                # this evaluate can never wedge the sole worker.
+                pg.evaluate("(a) => window.__render(a.t, a.d)", {"t": template, "d": data})
+                png = pg.locator("#screen").screenshot(type="png")
+                slot[1] += 1
                 reply.put(("ok", png))
             except Exception as e:             # noqa: BLE001
+                # a crashed page/browser: drop everything so the next job relaunches
                 try:
                     if browser:
                         browser.close()
                 except Exception:              # noqa: BLE001
                     pass
-                browser = None                 # relaunch on the next job
+                browser = None
+                pages = {}
                 reply.put(("err", e))
 
 
 def _ensure_worker():
     global _WORKER
+    # Hold the lock only to start the thread (fast). The browser install +
+    # launch happen INSIDE the worker, off the request path, so a slow
+    # first-time install never blocks unrelated render requests on this lock.
     with _PW_LOCK:
         if _WORKER is not None and _WORKER.is_alive():
             return
-        _ensure_playwright_browser()           # install the binary if missing
         _WORKER = threading.Thread(target=_worker_loop, daemon=True)
         _WORKER.start()
 
@@ -183,14 +276,14 @@ def warmup():
     threading.Thread(target=_ensure_worker, daemon=True).start()
 
 
-def _render_playwright(html, w, h, scale):
+def _render_playwright(template, data, w, h, scale):
     try:
         import playwright  # noqa: F401
     except ImportError:
         return None
     _ensure_worker()
     reply = queue.Queue()
-    _JOB_Q.put((html, w, h, scale, reply))
+    _JOB_Q.put((template, data, w, h, scale, reply))
     try:
         status, payload = reply.get(timeout=90)
     except queue.Empty:
@@ -247,11 +340,13 @@ def render_png(template, data, scale=2):
     """template: user's config; data: fetch_data() result (or None). -> PNG bytes"""
     scale = max(1, min(3, int(scale or 2)))
     w, h = canvas_size(template)
-    html = build_page(template, data)
-    png = _render_playwright(html, w, h, scale)
+    # Fast path: persistent Playwright page (engine pre-loaded) renders from
+    # template+data directly.
+    png = _render_playwright(template, data, w, h, scale)
     if png:
         return png
-    png = _render_syschrome(html, w, h, scale)
+    # Fallback (local dev / no Playwright): system Chrome on a built HTML page.
+    png = _render_syschrome(build_page(template, data), w, h, scale)
     if png:
         return png
     raise RuntimeError(
