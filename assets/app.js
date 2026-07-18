@@ -1518,6 +1518,17 @@
     document.getElementById('apiMsg').innerHTML =
       '<span style="color:' + (bad ? '#ff9' : '#c9ffdc') + '">' + html + '</span>';
   }
+  // Key errors on a host almost always mean API_KEY isn't set (or the field
+  // holds a stale auto-generated key from a previous deploy). Say so.
+  function apiErr(msg) {
+    var m = 'Ошибка: ' + esc(msg);
+    if (/ключ|key/i.test(msg)) {
+      m += '<br><span style="color:#9aa6bd">На хостинге ключ задаётся переменной '
+        + '<b>API_KEY</b> в настройках Render (Environment) — впишите сюда то же значение. '
+        + 'Локально ключ подставляется сам.</span>';
+    }
+    apiMsg(m, true);
+  }
   function refreshApiDocs() {
     var k = (apiKeyEl.value || 'ВАШ_КЛЮЧ').trim();
     var base = apiOrigin() + '/api/image';
@@ -1548,7 +1559,7 @@
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'ошибка');
       apiMsg('✓ Шаблон опубликован — API теперь рендерит в этом оформлении.');
-    }).catch(function (e) { apiMsg('Ошибка: ' + esc(e.message), true); });
+    }).catch(function (e) { apiErr(e.message); });
   });
   document.getElementById('apiTest').addEventListener('click', function () {
     var k = (apiKeyEl.value || '').trim();
@@ -1562,7 +1573,7 @@
       })
       .then(function (b) { apiMsg('✓ API работает — картинка ' + Math.round(b.size / 1024) + ' КБ. ' +
         '<a href="' + URL.createObjectURL(b) + '" target="_blank" style="color:#9fd">открыть</a>'); })
-      .catch(function (e) { apiMsg('Ошибка: ' + esc(e.message), true); });
+      .catch(function (e) { apiErr(e.message); });
   });
   document.getElementById('apiTpl').addEventListener('click', function () {
     download(JSON.stringify(state, null, 2), 'template.json', 'application/json');

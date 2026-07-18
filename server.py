@@ -16,6 +16,11 @@ import _subito   # noqa: E402
 import _store    # noqa: E402
 import _render    # noqa: E402
 
+# Render/Railway/Fly set PORT. This is a reliable "we are on a host" signal —
+# unlike the client IP, which a reverse proxy rewrites to 127.0.0.1 and would
+# fool a localhost check into leaking the API key over the internet.
+IS_CLOUD = bool(os.environ.get("PORT"))
+
 
 def _err_code(e):
     """Map an exception from the fetch/parse pipeline to an HTTP status:
@@ -122,11 +127,14 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"ok": True, "templateSource": src,
                                "hasTemplate": bool(tpl), "renderer": backend})
 
-        # --- API key: only readable from localhost (never over the net) ---
+        # --- API key: only readable on local dev, NEVER over the net --------
+        # On a host, the key must come from the API_KEY env var (stable, secret)
+        # and is set by the operator — the browser never needs to read it back.
         if parsed.path == "/api/key":
-            if not self._is_local():
+            if IS_CLOUD or not self._is_local():
                 return self._json({"ok": False, "error":
-                                   "Ключ виден только на localhost. На хостинге задайте переменную API_KEY."}, 403)
+                                   "Ключ виден только на localhost. На хостинге задайте "
+                                   "переменную API_KEY в настройках Render и впишите её сюда."}, 403)
             k, src = _store.get_api_key()
             return self._json({"ok": True, "key": k, "source": src})
 
