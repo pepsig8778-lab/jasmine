@@ -7,7 +7,7 @@ Cloud:  runs on 0.0.0.0:$PORT when the PORT env var is set (Render/Railway/Fly).
 
 Parsing goes through the proxy (see api/_subito.py + SUBITO_PROXY / proxy.txt).
 """
-import sys, os, json, time, threading, urllib.parse, functools
+import sys, os, json, time, hashlib, threading, urllib.parse, functools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,6 +48,19 @@ def _err_code(e):
     if isinstance(e, RuntimeError):
         return 502
     return 500
+
+
+# Rendered-PNG cache: the output is fully determined by (template, data, scale)
+# — qrUrl/image/opts all live inside `data` — so identical repeat calls (viewers
+# of the same listing, the frontend's auto-retry, API polls) skip the render
+# entirely. A published template rewrites `data`-independent `tpl`, changing the
+# key, so it invalidates for free.
+_PNG_CACHE, _PNG_LOCK, _PNG_TTL = {}, threading.Lock(), 300
+
+
+def _png_key(tpl, data, scale):
+    blob = json.dumps([tpl, data, scale], sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
 
 def opts_from_query(q):
@@ -123,12 +136,24 @@ class Handler(SimpleHTTPRequestHandler):
                 scale = int(q.get("scale", ["1"])[0])   # API default 1x (natural size)
             except ValueError:
                 scale = 1
+            scale = max(1, min(3, scale))               # same clamp render_png uses
             try:
                 data = _subito.fetch_data(url, opts_from_query(q))
                 if qr_url:
                     data["qrLinkOverride"] = qr_url
                 tpl, _src = _store.load_template()
-                return self._png(_render.render_png(tpl, data, scale))
+                ck = _png_key(tpl, data, scale)
+                with _PNG_LOCK:
+                    hit = _PNG_CACHE.get(ck)
+                    png = hit[1] if hit and time.time() - hit[0] < _PNG_TTL else None
+                if png is None:
+                    png = _render.render_png(tpl, data, scale)
+                    with _PNG_LOCK:
+                        _PNG_CACHE[ck] = (time.time(), png)
+                        if len(_PNG_CACHE) > 100:       # bound memory on long-lived hosts
+                            oldest = min(_PNG_CACHE, key=lambda k: _PNG_CACHE[k][0])
+                            del _PNG_CACHE[oldest]
+                return self._png(png)
             except Exception as e:  # noqa: BLE001
                 return self._json({"ok": False, "error": str(e)}, _err_code(e))
 
