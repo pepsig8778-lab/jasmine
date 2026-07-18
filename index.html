@@ -443,10 +443,12 @@
               <pre class="code" id="apiUrl"></pre>
               <div class="sub">Пример</div>
               <pre class="code" id="apiCurl"></pre>
-              <div class="hint">Параметры: <code>key</code>, <code>url</code> (ссылка на объявление),
-                <code>qrUrl</code> (необяз. — отдельная ссылка для QR и блоков <code>{{link}}</code>,
-                вместо ссылки на объявление), <code>scale</code> (1–3). Ответ: <code>image/png</code>.
-                Ошибки: JSON с <code>error</code> (401 — ключ, 400 — ссылка, 502 — Subito, 500 — рендер).</div>
+              <div class="hint"><b>key</b> — ваш ключ · <b>url</b> — ссылка на объявление
+                (цена, фото, название) · <b>qrUrl</b> — необяз., отдельная ссылка для QR
+                и блоков <code>{{link}}</code> (иначе QR ведёт на объявление) ·
+                <b>scale</b> — необяз., чёткость 1–3 (по умолч. 1). Ответ: <code>image/png</code>.
+                Ошибки JSON: 401 ключ · 400 ссылка · 502 Subito.
+                Полная инструкция — <b>API.md</b>.</div>
             </div>
           </div>
           <div class="parser-result">

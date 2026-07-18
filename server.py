@@ -97,9 +97,9 @@ class Handler(SimpleHTTPRequestHandler):
             # subito.it and only needs a sanity length cap.
             qr_url = (q.get("qrUrl", [""])[0] or "").strip()[:2000]
             try:
-                scale = int(q.get("scale", ["2"])[0])
+                scale = int(q.get("scale", ["1"])[0])   # API default 1x (natural size)
             except ValueError:
-                scale = 2
+                scale = 1
             try:
                 data = _subito.fetch_data(url, opts_from_query(q))
                 if qr_url:
