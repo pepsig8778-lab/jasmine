@@ -286,6 +286,42 @@
 
   .hint{font-size:11px;color:var(--ink-dim);padding:0 2px 8px;line-height:1.5;}
   code{background:var(--field);padding:1px 5px;border-radius:4px;font-size:11px;}
+
+  /* ---------------- polish: consistent interaction states ---------------- */
+  .btn{transition:border-color .12s,background .12s,color .12s,filter .12s;}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary:hover{filter:brightness(1.1);}
+  .btn:focus-visible,.tab:focus-visible,.pill:focus-visible,.add-it:focus-visible{
+    outline:2px solid var(--accent-2);outline-offset:1px;}
+  .fld input[type=text]:focus,.fld input[type=number]:focus,.fld textarea:focus,
+  .fld select:focus,.url-row input:focus{
+    border-color:var(--accent-2);box-shadow:0 0 0 2px rgba(79,124,255,.16);}
+  .fld input[type=text]:hover,.fld input[type=number]:hover,.fld select:hover,
+  .fld textarea:hover{border-color:#3a4a6e;}
+  details.sec>summary:hover{background:rgba(255,255,255,.035);}
+  details.sec[open]{border-color:#334061;}
+  .pill{transition:border-color .12s,background .12s,color .12s;}
+  .pill:hover{border-color:var(--accent-2);color:var(--ink);}
+
+  /* thin dark scrollbars everywhere the app scrolls */
+  #controls::-webkit-scrollbar,.canvas-scroll::-webkit-scrollbar,
+  .parser-canvas-scroll::-webkit-scrollbar,.hist-menu::-webkit-scrollbar,
+  #view-parser::-webkit-scrollbar,.rich-input::-webkit-scrollbar{width:10px;height:10px;}
+  #controls::-webkit-scrollbar-thumb,.canvas-scroll::-webkit-scrollbar-thumb,
+  .parser-canvas-scroll::-webkit-scrollbar-thumb,.hist-menu::-webkit-scrollbar-thumb,
+  #view-parser::-webkit-scrollbar-thumb,.rich-input::-webkit-scrollbar-thumb{
+    background:var(--line);border-radius:6px;border:2px solid transparent;background-clip:content-box;}
+  #controls::-webkit-scrollbar-thumb:hover,.canvas-scroll::-webkit-scrollbar-thumb:hover{
+    background:#3a4a6e;border:2px solid transparent;background-clip:content-box;}
+  #controls::-webkit-scrollbar-track,.canvas-scroll::-webkit-scrollbar-track,
+  .parser-canvas-scroll::-webkit-scrollbar-track,.hist-menu::-webkit-scrollbar-track,
+  #view-parser::-webkit-scrollbar-track,.rich-input::-webkit-scrollbar-track{background:transparent;}
+
+  /* loading spinner (parser "Собираю…") */
+  .spin{display:inline-block;width:26px;height:26px;border:3px solid var(--line);
+    border-top-color:var(--accent-2);border-radius:50%;margin-bottom:12px;
+    animation:spin .75s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>

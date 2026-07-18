@@ -159,6 +159,8 @@
     preview.style.transform = 'scale(' + zoom + ')';
     canvasWrap.style.width = (state.canvas.width * zoom) + 'px';
     canvasWrap.style.height = (state.canvas.height * zoom) + 'px';
+    var zr = document.getElementById('zoomReset');
+    if (zr) zr.textContent = Math.round(zoom * 100) + '%';   // live value, click = reset
     if (selId) {
       var se = preview.querySelector('[data-custom="' + selId + '"]');
       if (se) se.classList.add('sel');
@@ -903,6 +905,13 @@
   bind('zoomIn', function () { zoom = Math.min(2, zoom + 0.1); renderPreview(); });
   bind('zoomOut', function () { zoom = Math.max(0.4, zoom - 0.1); renderPreview(); });
   bind('zoomReset', function () { zoom = 1; renderPreview(); });
+  // Ctrl+wheel over the canvas = zoom (like every design tool)
+  document.querySelector('.canvas-scroll').addEventListener('wheel', function (e) {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zoom = Math.max(0.4, Math.min(2, Math.round((zoom + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+    renderPreview();
+  }, { passive: false });
   bind('png1', function () { exportPNG(1); });
   bind('png2', function () { exportPNG(2); });
   bind('png3', function () { exportPNG(3); });
@@ -1137,7 +1146,7 @@
     var ph = document.getElementById('pPlaceholder');
     var el = document.getElementById('parserPreview');
     el.style.display = 'none'; ph.style.display = 'block';
-    ph.innerHTML = '<span class="big">⏳</span>Собираю данные объявления…<br>обычно 3–6 секунд' +
+    ph.innerHTML = '<span class="spin"></span><br>Собираю данные объявления…<br>обычно 1–6 секунд' +
       '<br><small style="opacity:.6">(на бесплатном хостинге первый запрос после простоя — дольше)</small>';
     fetch('api/parse?url=' + encodeURIComponent(url)).then(function (r) {
       return r.json().catch(function () { throw new Error('HTTP ' + r.status); });
