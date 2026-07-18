@@ -1,0 +1,3 @@
+# Shell scripts must stay LF or they break on Linux (Render) with
+# "/usr/bin/env: bad interpreter". Force it regardless of the OS committing.
+*.sh text eol=lf
