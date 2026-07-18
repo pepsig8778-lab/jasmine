@@ -9,7 +9,7 @@ Backends, in order:
   1. Playwright chromium  (works on hosts: `playwright install chromium`)
   2. A system Chrome/Edge (local dev)
 """
-import os, io, sys, time, json, shutil, threading, subprocess, tempfile
+import os, io, sys, time, json, queue, shutil, threading, subprocess, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -102,20 +102,70 @@ def _ensure_playwright_browser():
         pass
 
 
-def _launch_and_shoot(html, w, h, scale):
+# --- persistent browser, driven by ONE worker thread -----------------------
+# Launching a fresh Chromium per request costs ~1-3s. Instead a single worker
+# thread owns Playwright and keeps ONE browser alive, rendering each request in
+# a throwaway page — so only the first request pays the launch cost. The sync
+# API is thread-affine, hence the dedicated thread + job queue.
+_JOB_Q = queue.Queue()
+_WORKER = None
+
+
+def _launch_browser(p):
+    """Launch chromium, retrying the transient ETXTBSY that hits a just-installed
+    binary (its write handle isn't released yet)."""
+    last = None
+    for _ in range(5):
+        try:
+            return p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
+        except Exception as e:                 # noqa: BLE001
+            last = e
+            if "ETXTBSY" in str(e) or "Text file busy" in str(e):
+                time.sleep(1.5)
+                continue
+            raise
+    raise last
+
+
+def _worker_loop():
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
-        b = p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
-        try:
-            pg = b.new_page(viewport={"width": w, "height": h + 80}, device_scale_factor=scale)
-            pg.set_content(html, wait_until="load")
+        browser = None
+        while True:
+            html, w, h, scale, reply = _JOB_Q.get()
             try:
-                pg.wait_for_function("document.title==='READY'", timeout=15000)
-            except Exception:
-                pass
-            return pg.screenshot(clip={"x": 0, "y": 0, "width": w, "height": h})
-        finally:
-            b.close()
+                if browser is None or not browser.is_connected():
+                    browser = _launch_browser(p)
+                pg = browser.new_page(viewport={"width": w, "height": h + 80},
+                                      device_scale_factor=scale)
+                try:
+                    pg.set_content(html, wait_until="load")
+                    try:
+                        pg.wait_for_function("document.title==='READY'", timeout=15000)
+                    except Exception:
+                        pass
+                    png = pg.screenshot(clip={"x": 0, "y": 0, "width": w, "height": h})
+                finally:
+                    pg.close()
+                reply.put(("ok", png))
+            except Exception as e:             # noqa: BLE001
+                try:
+                    if browser:
+                        browser.close()
+                except Exception:              # noqa: BLE001
+                    pass
+                browser = None                 # relaunch on the next job
+                reply.put(("err", e))
+
+
+def _ensure_worker():
+    global _WORKER
+    with _PW_LOCK:
+        if _WORKER is not None and _WORKER.is_alive():
+            return
+        _ensure_playwright_browser()           # install the binary if missing
+        _WORKER = threading.Thread(target=_worker_loop, daemon=True)
+        _WORKER.start()
 
 
 def _render_playwright(html, w, h, scale):
@@ -123,25 +173,16 @@ def _render_playwright(html, w, h, scale):
         import playwright  # noqa: F401
     except ImportError:
         return None
-    # One render at a time: the free tier can't hold two Chromiums, and it
-    # avoids the ETXTBSY race where a just-installed binary is launched while
-    # still being written.
-    with _PW_LOCK:
-        _ensure_playwright_browser()           # no-op if already installed
-        last = None
-        for attempt in range(4):
-            try:
-                return _launch_and_shoot(html, w, h, scale)
-            except Exception as e:             # noqa: BLE001
-                last = e
-                msg = str(e)
-                # ETXTBSY ("text file busy") right after install is transient —
-                # the binary's write handle isn't released yet. Wait & retry.
-                if "ETXTBSY" in msg or "Text file busy" in msg or "install" in msg.lower():
-                    time.sleep(1.5)
-                    continue
-                break
-        raise RuntimeError("playwright render failed: %s" % last)
+    _ensure_worker()
+    reply = queue.Queue()
+    _JOB_Q.put((html, w, h, scale, reply))
+    try:
+        status, payload = reply.get(timeout=90)
+    except queue.Empty:
+        raise RuntimeError("playwright render timed out")
+    if status == "ok":
+        return payload
+    raise RuntimeError("playwright render failed: %s" % payload)
 
 
 def _find_chrome():
