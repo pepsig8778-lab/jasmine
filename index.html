@@ -321,7 +321,24 @@
   .spin{display:inline-block;width:26px;height:26px;border:3px solid var(--line);
     border-top-color:var(--accent-2);border-radius:50%;margin-bottom:12px;
     animation:spin .75s linear infinite;}
+  .spin.mini{width:13px;height:13px;border-width:2px;margin:0 6px -2px 0;vertical-align:baseline;}
   @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---- API card: numbered steps + distinct message states + preview ---- */
+  .api-steps{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px;}
+  .api-msg{margin:8px 0;font-size:12px;line-height:1.5;}
+  .api-msg:empty{display:none;}
+  .api-msg.progress{color:#bcd0ff;}
+  .api-msg.ok{color:#c9ffdc;}
+  .api-msg.err{color:#ffd0d0;background:rgba(220,60,60,.1);border:1px solid rgba(220,60,60,.45);
+    border-radius:9px;padding:8px 11px;}
+  .api-msg.err b{color:#fff;}
+  .api-preview{margin:10px 0 2px;padding:10px;background:var(--field);
+    border:1px solid var(--field-line);border-radius:10px;}
+  .api-preview img{max-width:170px;max-height:300px;border-radius:6px;display:block;
+    border:1px solid var(--field-line);}
+  .api-preview-meta{display:flex;align-items:center;gap:10px;margin-top:8px;
+    font-size:11.5px;color:var(--ink-dim);flex-wrap:wrap;}
 </style>
 </head>
 <body>
@@ -429,26 +446,33 @@
             <div class="parser-card" id="pOpts"><!-- options generated --></div>
             <div class="parser-card api-card">
               <h3>🔑 API — ссылка → готовая картинка</h3>
-              <div class="hint">Настроили шаблон в «Конструкторе» → опубликуйте его → дёргайте
-                API из любой системы: отдаёте ссылку Subito, получаете PNG.</div>
-              <label class="fld"><span class="fld-l">API-ключ</span>
+              <div class="hint">Из любой системы отправляете ссылку Subito — получаете PNG
+                в вашем оформлении.</div>
+              <label class="fld"><span class="fld-l">1 · API-ключ</span>
                 <input type="text" id="apiKey" placeholder="вставьте ключ (env API_KEY)"></label>
-              <div class="qr-actions">
-                <button class="btn sm" id="apiPublish">Опубликовать шаблон</button>
-                <button class="btn sm ghost" id="apiTest">Проверить</button>
-                <button class="btn sm ghost" id="apiTpl">template.json</button>
+              <div class="api-steps">
+                <button class="btn sm" id="apiPublish">2 · Опубликовать шаблон</button>
+                <button class="btn sm ghost" id="apiTest">3 · Проверить ↑ по ссылке сверху</button>
               </div>
-              <div class="hint" id="apiMsg" style="margin-top:8px"></div>
-              <div class="sub">Запрос</div>
+              <div class="api-msg" id="apiMsg"></div>
+              <div class="api-preview" id="apiPreview" style="display:none">
+                <img id="apiPreviewImg" alt="результат">
+                <div class="api-preview-meta">
+                  <span id="apiPreviewInfo"></span>
+                  <button class="btn xs" id="apiCopyUrl">Копировать URL</button>
+                </div>
+              </div>
+              <div class="sub">Готовый запрос (GET)</div>
               <pre class="code" id="apiUrl"></pre>
-              <div class="sub">Пример</div>
+              <div class="sub">Пример (cURL)</div>
               <pre class="code" id="apiCurl"></pre>
               <div class="hint"><b>key</b> — ваш ключ · <b>url</b> — ссылка на объявление
                 (цена, фото, название) · <b>qrUrl</b> — необяз., отдельная ссылка для QR
                 и блоков <code>{{link}}</code> (иначе QR ведёт на объявление) ·
                 <b>scale</b> — необяз., чёткость 1–3 (по умолч. 1). Ответ: <code>image/png</code>.
                 Ошибки JSON: 401 ключ · 400 ссылка · 502 Subito.
-                Полная инструкция — <b>API.md</b>.</div>
+                Полная инструкция — <b>API.md</b>.
+                <button class="lnk" id="apiTpl">скачать template.json</button></div>
             </div>
           </div>
           <div class="parser-result">

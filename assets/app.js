@@ -1525,33 +1525,55 @@
 
   /* ---- API card (key + publish template + docs) ------------------------ */
   var apiKeyEl = document.getElementById('apiKey');
+  var apiMsgEl = document.getElementById('apiMsg');
+  var apiTimer = null;                              // elapsed-seconds ticker
   function apiOrigin() { return location.origin + location.pathname.replace(/\/[^\/]*$/, ''); }
-  function apiMsg(html, bad) {
-    document.getElementById('apiMsg').innerHTML =
-      '<span style="color:' + (bad ? '#ff9' : '#c9ffdc') + '">' + html + '</span>';
+  function apiStop() { if (apiTimer) { clearInterval(apiTimer); apiTimer = null; } }
+  // Three visually distinct states: progress (blue+spinner+timer), ok (green), err (red box).
+  function apiMsg(html, state) {
+    apiStop();
+    apiMsgEl.className = 'api-msg ' + (state || 'ok');
+    apiMsgEl.innerHTML = html;
+  }
+  function apiProgress(label) {
+    apiStop();
+    var t0 = Date.now();
+    function paint() {
+      var s = Math.round((Date.now() - t0) / 1000);
+      apiMsgEl.className = 'api-msg progress';
+      apiMsgEl.innerHTML = '<span class="spin mini"></span>' + label +
+        (s ? ' · ' + s + ' с' : '') +
+        '<br><small style="opacity:.65">первый запрос после простоя — дольше</small>';
+    }
+    paint();
+    apiTimer = setInterval(paint, 1000);
   }
   // Key errors on a host almost always mean API_KEY isn't set (or the field
   // holds a stale auto-generated key from a previous deploy). Say so.
   function apiErr(msg) {
-    var m = 'Ошибка: ' + esc(msg);
+    var m = '⚠️ ' + esc(msg);
     if (/ключ|key/i.test(msg)) {
-      m += '<br><span style="color:#9aa6bd">На хостинге ключ задаётся переменной '
+      m += '<br><span style="opacity:.8">На хостинге ключ задаётся переменной '
         + '<b>API_KEY</b> в настройках Render (Environment) — впишите сюда то же значение. '
         + 'Локально ключ подставляется сам.</span>';
     }
-    apiMsg(m, true);
+    apiMsg(m, 'err');
   }
+  function testUrl() { return (document.getElementById('pUrl').value || '').trim(); }
   function refreshApiDocs() {
     var k = (apiKeyEl.value || 'ВАШ_КЛЮЧ').trim();
     var base = apiOrigin() + '/api/image';
-    var u = base + '?key=' + encodeURIComponent(k) + '&url=<ССЫЛКА_SUBITO>&qrUrl=<ССЫЛКА_ДЛЯ_QR>';
-    document.getElementById('apiUrl').textContent = 'GET ' + u;
+    var u = testUrl();                              // show the REAL url once one is entered
+    var urlPart = /subito\.it\//i.test(u) ? encodeURIComponent(u) : '<ССЫЛКА_SUBITO>';
+    document.getElementById('apiUrl').textContent =
+      'GET ' + base + '?key=' + encodeURIComponent(k) + '&url=' + urlPart + '&qrUrl=<ССЫЛКА_ДЛЯ_QR>';
     document.getElementById('apiCurl').textContent =
       'curl -o out.png "' + base + '?key=' + k +
       '&url=https://www.subito.it/.../annuncio-123.htm&qrUrl=https://your.link/promo"';
     try { localStorage.setItem('api-key', apiKeyEl.value || ''); } catch (e) {}
   }
   apiKeyEl.addEventListener('input', refreshApiDocs);
+  document.getElementById('pUrl').addEventListener('input', refreshApiDocs);  // GET box tracks the link too
   try { apiKeyEl.value = localStorage.getItem('api-key') || ''; } catch (e) {}
   // on localhost the server reveals the auto-generated key for convenience
   if (!apiKeyEl.value) {
@@ -1563,33 +1585,56 @@
 
   document.getElementById('apiPublish').addEventListener('click', function () {
     var k = (apiKeyEl.value || '').trim();
-    if (!k) { apiMsg('Сначала укажите API-ключ', true); return; }
-    apiMsg('Публикую шаблон…');
+    if (!k) { apiErr('Сначала укажите API-ключ'); apiKeyEl.focus(); return; }
+    apiProgress('Публикую шаблон…');
     fetch('api/template?key=' + encodeURIComponent(k), {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state)
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'ошибка');
-      apiMsg('✓ Шаблон опубликован — API теперь рендерит в этом оформлении.');
+      apiMsg('✓ Шаблон опубликован — теперь «Проверить» и API отдают это оформление.', 'ok');
     }).catch(function (e) { apiErr(e.message); });
   });
+
+  var apiPreview = document.getElementById('apiPreview');
+  var apiPrevImg = document.getElementById('apiPreviewImg');
+  var lastApiBlobUrl = null, lastApiReqUrl = '';
   document.getElementById('apiTest').addEventListener('click', function () {
     var k = (apiKeyEl.value || '').trim();
-    var url = (document.getElementById('pUrl').value || '').trim();
-    if (!/subito\.it\//i.test(url)) { apiMsg('Вставьте ссылку Subito в поле выше — проверю на ней', true); return; }
-    apiMsg('Проверяю API…');
-    fetch('api/image?key=' + encodeURIComponent(k) + '&url=' + encodeURIComponent(url) + '&scale=1')
-      .then(function (r) {
-        if (r.headers.get('content-type') === 'image/png') return r.blob();
-        return r.json().then(function (j) { throw new Error(j.error || ('HTTP ' + r.status)); });
-      })
-      .then(function (b) { apiMsg('✓ API работает — картинка ' + Math.round(b.size / 1024) + ' КБ. ' +
-        '<a href="' + URL.createObjectURL(b) + '" target="_blank" style="color:#9fd">открыть</a>'); })
-      .catch(function (e) { apiErr(e.message); });
+    var url = testUrl();
+    if (!k) { apiErr('Сначала укажите API-ключ'); apiKeyEl.focus(); return; }
+    if (!/subito\.it\//i.test(url)) {
+      apiErr('Вставьте ссылку Subito в поле вверху страницы — проверю на ней');
+      var pu = document.getElementById('pUrl'); pu.focus(); pu.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    var reqUrl = 'api/image?key=' + encodeURIComponent(k) + '&url=' + encodeURIComponent(url);
+    lastApiReqUrl = apiOrigin() + '/' + reqUrl;
+    var t0 = Date.now();
+    apiProgress('Проверяю API…');
+    fetch(reqUrl).then(function (r) {
+      if ((r.headers.get('content-type') || '').indexOf('image/png') === 0) return r.blob();
+      return r.json().then(function (j) { throw new Error(j.error || ('HTTP ' + r.status)); });
+    }).then(function (b) {
+      var ms = Date.now() - t0;
+      if (lastApiBlobUrl) URL.revokeObjectURL(lastApiBlobUrl);   // don't leak blob URLs
+      lastApiBlobUrl = URL.createObjectURL(b);
+      apiPrevImg.src = lastApiBlobUrl;
+      apiPreview.style.display = 'block';
+      document.getElementById('apiPreviewInfo').textContent =
+        '✓ ' + Math.round(b.size / 1024) + ' КБ · ' + (ms / 1000).toFixed(1) + ' с';
+      apiMsg('✓ API работает — картинка ниже.', 'ok');
+    }).catch(function (e) { apiErr(e.message); });
+  });
+  document.getElementById('apiCopyUrl').addEventListener('click', function () {
+    if (!lastApiReqUrl) return;
+    if (navigator.clipboard) navigator.clipboard.writeText(lastApiReqUrl).then(
+      function () { flash('URL скопирован в буфер'); }, function () { showJson(lastApiReqUrl); });
+    else showJson(lastApiReqUrl);
   });
   document.getElementById('apiTpl').addEventListener('click', function () {
     download(JSON.stringify(state, null, 2), 'template.json', 'application/json');
-    apiMsg('Положите template.json в корень репозитория и запушьте — шаблон переживёт перезапуск.');
+    flash('template.json скачан');
   });
 
   /* ---- QR link override (lives in the template, so it sticks) ---------- */
