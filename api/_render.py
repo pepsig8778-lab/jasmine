@@ -9,7 +9,7 @@ Backends, in order:
   1. Playwright chromium  (works on hosts: `playwright install chromium`)
   2. A system Chrome/Edge (local dev)
 """
-import os, io, json, shutil, subprocess, tempfile
+import os, io, sys, json, shutil, subprocess, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -69,12 +69,46 @@ def canvas_size(template):
     return w, h
 
 
+_PW_INSTALL_TRIED = False
+
+
+def _playwright_browser_ready():
+    """True only if the chromium BINARY is actually on disk — importing the
+    playwright package is not enough (the common Render mistake: pip installed
+    the package but the build never ran `playwright install chromium`)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    try:
+        with sync_playwright() as p:
+            return bool(p.chromium.executable_path) and os.path.exists(p.chromium.executable_path)
+    except Exception:                          # noqa: BLE001
+        return False
+
+
+def _ensure_playwright_browser():
+    """Safety net: if the browser is missing (misconfigured build), download it
+    once per process. Slow the first time, then cached for this container."""
+    global _PW_INSTALL_TRIED
+    if _PW_INSTALL_TRIED or _playwright_browser_ready():
+        return
+    _PW_INSTALL_TRIED = True
+    try:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"],
+                       timeout=240, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:                          # noqa: BLE001
+        pass
+
+
 def _render_playwright(html, w, h, scale):
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return None
+    _ensure_playwright_browser()               # no-op if already installed
     try:
+        from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             b = p.chromium.launch(args=["--no-sandbox", "--disable-dev-shm-usage"])
             pg = b.new_page(viewport={"width": w, "height": h + 80}, device_scale_factor=scale)

@@ -1,0 +1,20 @@
+# Render Blueprint. If you create the service from this file, the build already
+# installs the Chromium browser Playwright needs. For an EXISTING service, set
+# the same Build Command in the dashboard (Settings → Build Command): ./build.sh
+services:
+  - type: web
+    name: jasmine
+    runtime: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "python server.py"
+    envVars:
+      # Set this to your own long random secret. The app rejects requests
+      # without the matching ?key=. Without it the key is auto-generated and
+      # changes on every deploy (the free disk is wiped each time).
+      - key: API_KEY
+        sync: false
+      # Rotating Italian residential proxy for Subito (host:port:user:pass or
+      # http://user:pass@host:port). Set as a secret; never commit it.
+      - key: SUBITO_PROXY
+        sync: false

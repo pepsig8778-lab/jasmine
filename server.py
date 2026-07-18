@@ -119,11 +119,13 @@ class Handler(SimpleHTTPRequestHandler):
             if not _store.check_key(q.get("key", [""])[0]):
                 return self._json({"ok": False, "error": "неверный API-ключ"}, 401)
             tpl, src = _store.load_template()
-            try:
-                import playwright  # noqa: F401
+            # Honest check: the browser BINARY must exist, not just the package.
+            if _render._playwright_browser_ready():
                 backend = "playwright"
-            except ImportError:
-                backend = "chrome" if _render._find_chrome() else "none"
+            elif _render._find_chrome():
+                backend = "chrome"
+            else:
+                backend = "none"
             return self._json({"ok": True, "templateSource": src,
                                "hasTemplate": bool(tpl), "renderer": backend})
 
