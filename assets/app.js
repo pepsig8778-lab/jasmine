@@ -335,8 +335,7 @@
   // "＋": open an empty project tab, then offer the file picker right away.
   // The user can also just Ctrl+V an image into the empty tab.
   function pickImageForNewProject() {
-    bgTarget = 'active';           // the just-created empty tab receives the image
-    createBlankProject('', 418, 826);
+    createBlankProject('', 418, 826);   // empty tab receives the uploaded/pasted image
     flash('Пустой проект — вставьте картинку (Ctrl+V) или загрузите файл');
     var inp = document.getElementById('projImageInput');
     if (inp) inp.click();
