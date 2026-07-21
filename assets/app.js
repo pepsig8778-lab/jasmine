@@ -445,6 +445,11 @@
     }
     positionSelBar();
     updateFitWarn();
+    // On an empty image-template, spell out how to edit (overlay a block) —
+    // the picture itself isn't editable pixels, you drop blocks over it.
+    var cta = document.getElementById('canvasCta');
+    if (cta) cta.classList.toggle('show',
+      isBlankProject() && !!(state.canvas && state.canvas.bgImage) && !(state.custom && state.custom.length));
     persist();
   }
 

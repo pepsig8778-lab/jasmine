@@ -309,6 +309,11 @@
   .blank-hint{font-size:12px;line-height:1.55;color:var(--ink);background:rgba(79,124,255,.1);
     border:1px solid rgba(79,124,255,.4);border-radius:10px;padding:10px 12px;margin:6px 0 10px;}
   .blank-hint code{background:var(--field);}
+  .canvas-cta{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;
+    display:none;max-width:80%;text-align:center;font-size:13px;line-height:1.6;color:#fff;
+    background:rgba(15,20,32,.82);border:1px solid var(--accent-2);border-radius:12px;
+    padding:16px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);pointer-events:none;}
+  .canvas-cta.show{display:block;}
   code{background:var(--field);padding:1px 5px;border-radius:4px;font-size:11px;}
 
   /* ---------------- polish: consistent interaction states ---------------- */
@@ -448,7 +453,11 @@
           </div>
         </div>
         <div class="canvas-scroll">
-          <div id="canvasWrap"><div id="preview" class="screen"></div></div>
+          <div id="canvasWrap"><div id="preview" class="screen"></div>
+            <div class="canvas-cta" id="canvasCta">👆 Нажмите <b>«＋ Добавить на шаблон»</b> вверху,<br>
+              выберите поле (текст, {{price}}, QR…) и кликните по картинке,<br>
+              чтобы положить <b>редактируемый блок</b> поверх.</div>
+          </div>
         </div>
       </main>
     </section>
