@@ -882,18 +882,36 @@
       fRange('Скругление карточек', 'theme.cardRadius', 0, 24, 1) +
       '<div class="theme-grid">' + theme + '</div>';
 
-    controls.innerHTML =
-      '<details class="sec" data-sec="custom"><summary>➕ Свои элементы (' +
-        ((state.custom || []).length) + ')</summary><div class="sec-body">' + customEditor() + '</div></details>' +
-      section('Разделы (порядок / вид)', layoutEditor(), false) +
-      section('Рамка и прокрутка', frame, false) +
-      section('Шапка', header, false) +
-      section('Сводка заказа', summary, true) +
-      section('Промокод', discount, false) +
-      section('Доставка', shipping, true) +
-      section('QR-код', qr, false) +
-      section('Стиль и цвета', style, false);
+    var customSec = '<details class="sec" data-sec="custom"' + (isBlankProject() ? ' open' : '') +
+      '><summary>➕ Свои элементы (' + ((state.custom || []).length) +
+      ')</summary><div class="sec-body">' + customEditor() + '</div></details>';
+
+    if (isBlankProject()) {
+      // Image-template project: the picture IS the layout. Drop the Subito-only
+      // sections (header/summary/discount/shipping/order) — you edit by putting
+      // your own blocks over the image. Keep background, QR and style.
+      controls.innerHTML =
+        '<div class="blank-hint">🖼 <b>Шаблон-картинка.</b> Нажмите <b>«＋ Добавить на шаблон»</b> ' +
+        'вверху и кладите поля поверх картинки: текст, <code>{{price}}</code>, QR и др. ' +
+        'Двойной клик по блоку — правка, тянуть — двигать.</div>' +
+        customSec +
+        section('Фон и рамка', frame, false) +
+        section('QR-код', qr, false) +
+        section('Стиль и цвета (шрифт/цвета блоков)', style, false);
+    } else {
+      controls.innerHTML =
+        customSec +
+        section('Разделы (порядок / вид)', layoutEditor(), false) +
+        section('Рамка и прокрутка', frame, false) +
+        section('Шапка', header, false) +
+        section('Сводка заказа', summary, true) +
+        section('Промокод', discount, false) +
+        section('Доставка', shipping, true) +
+        section('QR-код', qr, false) +
+        section('Стиль и цвета', style, false);
+    }
   }
+  function isBlankProject() { return !!(projects[activeId] && projects[activeId].mode === 'blank'); }
 
   /* Rebuild form while keeping panel scroll + open sections. */
   function rebuildForm() {
