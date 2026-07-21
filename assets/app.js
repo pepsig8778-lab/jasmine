@@ -34,6 +34,21 @@
   var LS_BACKUP = LS_KEY + ':backup';
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  /* ---- projects (multi-tab) ------------------------------------------------
+     Each project is an independent, persisted document. The live globals
+     (state, hist, histIdx, selId, parserState, ..., zoom) always describe the
+     ACTIVE project; switchProject parks them into a record and restores the
+     target's. See initProjects/saveActive/switchProject below. The default
+     project keeps docKey=LS_KEY so existing users lose nothing. */
+  var PROJECTS_KEY = 'subito-projects-v1';
+  var projects = {};            // id -> {id, name, mode, docKey, +parked globals}
+  var order = [];               // tab order of ids
+  var activeId = 'default';
+  function activeDocKey() { return (projects[activeId] && projects[activeId].docKey) || LS_KEY; }
+  function activeBackupKey() { return activeDocKey() + ':backup'; }
+  function puid() { return 'p' + Math.random().toString(36).slice(2, 8); }
 
   /* The renderer falls back to CUSTOM_DEFAULTS, so an unset prop still DRAWS a
      value — but the panel reads state and would show empty/wrong. Materialise
@@ -46,21 +61,22 @@
     });
     return cfg;
   }
-  function loadState() {
-    var raw = lsGet(LS_KEY);
+  function loadState(key) {
+    key = key || LS_KEY;
+    var raw = lsGet(key);
     if (!raw) return fillCustomDefaults(clone(window.DEFAULT_CONFIG));
     try {
       // saved OVER defaults -> new fields appear, user's settings are kept
       return fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), JSON.parse(raw)));
     } catch (e) {
-      lsSet(LS_BACKUP, raw);          // corrupt: keep a copy, never lose it silently
+      lsSet(key + ':backup', raw);    // corrupt: keep a copy, never lose it silently
       return fillCustomDefaults(clone(window.DEFAULT_CONFIG));
     }
   }
   var state = loadState();
 
-  function backupState() { return lsSet(LS_BACKUP, JSON.stringify(state)); }
-  function hasBackup() { return !!lsGet(LS_BACKUP); }
+  function backupState() { return lsSet(activeBackupKey(), JSON.stringify(state)); }
+  function hasBackup() { return !!lsGet(activeBackupKey()); }
 
   /* ---- change journal (undo / redo by steps) --------------------------- */
   var hist = [], histIdx = -1, restoring = false;
@@ -87,9 +103,14 @@
     updateHistUI();
   }
   function persist() {
-    lsSet(LS_KEY, JSON.stringify(state));
+    if (!lsSet(activeDocKey(), JSON.stringify(state))) quotaWarn();
     if (!restoring) snapshot(pendingLabel, pendingCoalesce);
     pendingLabel = 'Изменение'; pendingCoalesce = null;
+  }
+  var quotaWarned = false;
+  function quotaWarn() {
+    if (quotaWarned) return; quotaWarned = true;
+    flash('⚠ Память браузера заполнена — закройте лишние проекты, иначе изменения не сохранятся');
   }
   function restoreTo(i) {
     if (i < 0 || i >= hist.length || i === histIdx) return;
@@ -103,6 +124,264 @@
   }
   function undo() { if (histIdx > 0) { restoreTo(histIdx - 1); flash('Отменено: ' + hist[histIdx].label); } }
   function redo() { if (histIdx < hist.length - 1) restoreTo(histIdx + 1); }
+
+  /* ---- projects: park/restore the live globals per document --------------- */
+  // The 8 live globals that ARE the active document. Parked into a record on
+  // switch-out, restored on switch-in — so the ~54 `state.` accesses and the
+  // undo journal never need to know projects exist.
+  function saveActive() {
+    var r = projects[activeId];
+    if (!r) return;
+    r.state = state; r.hist = hist; r.histIdx = histIdx; r.selId = selId;
+    r.parserState = parserState; r.parserZoom = parserZoom;
+    r.lastListingData = lastListingData; r.zoom = zoom;
+    if (!lsSet(r.docKey, JSON.stringify(state))) quotaWarn();
+  }
+  function persistIndex() {
+    var meta = {};
+    order.forEach(function (id) {
+      var r = projects[id];
+      if (r) meta[id] = { name: r.name, mode: r.mode, docKey: r.docKey };
+    });
+    lsSet(PROJECTS_KEY, JSON.stringify({ activeId: activeId, order: order, meta: meta }));
+  }
+  // First run after upgrade: wrap the existing single document as project #1.
+  function initProjects() {
+    var idx = null;
+    try { idx = JSON.parse(lsGet(PROJECTS_KEY) || 'null'); } catch (e) { idx = null; }
+    if (idx && idx.order && idx.order.length) {
+      order = idx.order.slice();
+      order.forEach(function (id) {
+        var m = (idx.meta && idx.meta[id]) || {};
+        projects[id] = { id: id, name: m.name || 'Проект', mode: m.mode || 'subito',
+                         docKey: m.docKey || (id === 'default' ? LS_KEY : LS_KEY + ':p:' + id) };
+      });
+      activeId = projects[idx.activeId] ? idx.activeId : order[0];
+    } else {
+      projects = {}; order = ['default']; activeId = 'default';
+      projects['default'] = { id: 'default', name: 'Subito', mode: 'subito', docKey: LS_KEY };
+      persistIndex();
+    }
+    // adopt the ACTIVE project's document into the live globals; the boot's
+    // first renderPreview() seeds hist[0], so leave the journal empty here.
+    var r = projects[activeId];
+    state = loadState(r.docKey);
+    hist = []; histIdx = -1;
+  }
+  /* A blank "any-template" project: all Subito sections off, empty flow, just
+     the background image + whatever custom overlays the user adds. */
+  function blankConfig(bgImage, w, h) {
+    return fillCustomDefaults(window.mergeConfig(clone(window.DEFAULT_CONFIG), {
+      canvas: { width: w || 418, height: h || 826, bgImage: bgImage || '', bgOpacity: 1, scrollbar: false },
+      header: { show: false }, discount: { show: false }, shipping: { show: false },
+      summary: { show: false, product: { image: '' } }, qr: { show: false },
+      layout: { order: [], free: {} }, custom: []
+    }));
+  }
+
+  // Assign the live globals from the active project record + re-render. Shared
+  // by switchProject and closeProject. `restoring` guards the spurious snapshot.
+  function hydrateActive() {
+    var r = projects[activeId];
+    if (r.state == null) r.state = loadState(r.docKey);
+    state = r.state;
+    hist = r.hist || []; histIdx = (r.histIdx == null ? -1 : r.histIdx);
+    selId = r.selId || null;
+    parserState = r.parserState || null; parserZoom = r.parserZoom || 1;
+    lastListingData = r.lastListingData || null; zoom = r.zoom || 1;
+    lastCK = null;                       // never coalesce across projects
+    if (hist.length === 0) { hist = [{ json: JSON.stringify(state), label: 'Начальное состояние', t: Date.now() }]; histIdx = 0; }
+    restoring = true;
+    genQR().then(function () {
+      rebuildForm(); renderPreview();
+      restoring = false; updateHistUI(); updateRestoreBtn();
+    });
+    applyProjectMode();
+  }
+  // The parser stays available for ALL projects: on an image-template you can
+  // overlay {{price}}/{{title}}/{{link}} blocks and the parser (or API) fills
+  // them from a Subito link — "the same abilities adapt to any template".
+  function applyProjectMode() {
+    var pt = document.querySelector('.tab[data-tab="parser"]');
+    if (pt) pt.style.display = '';
+  }
+  function switchProject(id) {
+    if (id === activeId || !projects[id]) return;
+    // commit an in-progress inline edit / cancel placement FIRST, else the
+    // deferred finish() would write into the wrong project.
+    if (editing && activeFinish) { try { activeFinish(true); } catch (e) {} }
+    setPlacing(null);
+    saveActive();
+    activeId = id;
+    hydrateActive();
+    persistIndex(); renderProjectTabs();
+  }
+  function closeProject(id) {
+    if (order.length <= 1 || !projects[id]) return;
+    var r = projects[id];
+    if (!window.confirm('Закрыть проект «' + r.name + '»? Отменить будет нельзя.')) return;
+    if (editing && activeFinish) { try { activeFinish(true); } catch (e) {} }
+    setPlacing(null);
+    var i = order.indexOf(id);
+    lsDel(r.docKey); lsDel(r.docKey + ':backup');
+    order.splice(i, 1); delete projects[id];
+    if (activeId === id) { activeId = order[Math.max(0, i - 1)]; hydrateActive(); }
+    persistIndex(); renderProjectTabs();
+  }
+  function renameProject(id, name) {
+    name = (name || '').trim().slice(0, 40);
+    if (!name || !projects[id]) return;
+    projects[id].name = name; persistIndex(); renderProjectTabs();
+  }
+  function duplicateProject(id) {
+    var src = projects[id]; if (!src) return;
+    if (editing && activeFinish) { try { activeFinish(true); } catch (e) {} }
+    setPlacing(null);
+    var srcDoc = (id === activeId) ? state : loadState(src.docKey);
+    saveActive();
+    var nid = newProjectRecord(src.name + ' (копия)', src.mode);
+    activeId = nid;
+    var r = projects[nid];
+    r.state = fillCustomDefaults(clone(srcDoc));
+    r.hist = []; r.histIdx = -1; r.selId = null;
+    r.parserState = null; r.parserZoom = 1; r.lastListingData = null; r.zoom = 1;
+    hydrateActive(); persistIndex(); renderProjectTabs();
+    flash('Проект продублирован');
+  }
+  function newProjectRecord(name, mode) {
+    var id = puid();
+    projects[id] = { id: id, name: name, mode: mode, docKey: LS_KEY + ':p:' + id };
+    order.push(id);
+    return id;
+  }
+  // Create + activate a blank project (optionally with a background image sized
+  // to it). saveActive() first so the current project isn't lost.
+  function createBlankProject(bgImage, w, h) {
+    if (editing && activeFinish) { try { activeFinish(true); } catch (e) {} }
+    setPlacing(null);
+    saveActive();
+    var id = newProjectRecord('Проект ' + (order.length + 1), 'blank');
+    activeId = id;
+    var r = projects[id];
+    r.state = blankConfig(bgImage, w, h);
+    r.hist = []; r.histIdx = -1; r.selId = null;
+    r.parserState = null; r.parserZoom = 1; r.lastListingData = null; r.zoom = 1;
+    hydrateActive();
+    persistIndex(); renderProjectTabs();
+    return id;
+  }
+
+  // Decode + downscale (>1200px -> JPEG) to protect the localStorage quota;
+  // the bg is just a backdrop to overlay editable blocks on. cb(dataURL,w,h).
+  function processImage(dataURL, cb) {
+    var img = new Image();
+    img.onload = function () {
+      var w = img.naturalWidth || 418, h = img.naturalHeight || 826, MAX = 1200;
+      if (Math.max(w, h) > MAX) {
+        var s = MAX / Math.max(w, h), tw = Math.round(w * s), th = Math.round(h * s);
+        try {
+          var cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+          var cx = cv.getContext('2d');
+          cx.fillStyle = '#fff'; cx.fillRect(0, 0, tw, th);   // flatten transparency
+          cx.drawImage(img, 0, 0, tw, th);
+          dataURL = cv.toDataURL('image/jpeg', 0.85); w = tw; h = th;
+        } catch (e) {}
+      }
+      cb(dataURL, w, h);
+    };
+    img.onerror = function () { flash('Не удалось прочитать картинку'); };
+    img.src = dataURL;
+  }
+  // Paste/upload an image: fill the CURRENT tab if it's a fresh empty blank
+  // (came from "＋"); otherwise open a new project. No duplicate empty tabs.
+  function imageToProject(dataURL) {
+    processImage(dataURL, function (url, w, h) {
+      var a = projects[activeId];
+      var emptyBlank = a && a.mode === 'blank' &&
+        !(state.canvas && state.canvas.bgImage) && !(state.custom && state.custom.length);
+      if (emptyBlank) {
+        markChange('Фон проекта');
+        state.canvas.width = w; state.canvas.height = h;
+        state.canvas.bgImage = url; state.canvas.scrollbar = false;
+        rebuildForm(); renderPreview();
+        flash('Картинка вставлена — добавляйте блоки поверх (двойной клик = править)');
+      } else {
+        createBlankProject(url, w, h);
+        flash('Новый проект из картинки — добавляйте блоки поверх');
+      }
+    });
+  }
+  // Replace the ACTIVE project's background (from the frame panel controls).
+  function applyBgToActive(dataURL) {
+    processImage(dataURL, function (url, w, h) {
+      markChange('Фон проекта');
+      state.canvas = state.canvas || {};
+      state.canvas.bgImage = url; state.canvas.width = w; state.canvas.height = h;
+      state.canvas.scrollbar = false;
+      if (state.canvas.bgOpacity == null) state.canvas.bgOpacity = 1;
+      rebuildForm(); renderPreview();
+    });
+  }
+  function pickBgForActive() { var i = document.getElementById('projImageInput'); if (i) i.click(); }
+  // Uploaded file always sets the ACTIVE project's background (＋ creates the
+  // empty tab first; "Заменить" targets the current one). Paste uses the
+  // new-or-fill funnel instead.
+  function fileToProject(file) {
+    if (!file || !/^image\//.test(file.type)) return;
+    var r = new FileReader();
+    r.onload = function () { applyBgToActive(r.result); };
+    r.readAsDataURL(file);
+  }
+  // "＋": open an empty project tab, then offer the file picker right away.
+  // The user can also just Ctrl+V an image into the empty tab.
+  function pickImageForNewProject() {
+    bgTarget = 'active';           // the just-created empty tab receives the image
+    createBlankProject('', 418, 826);
+    flash('Пустой проект — вставьте картинку (Ctrl+V) или загрузите файл');
+    var inp = document.getElementById('projImageInput');
+    if (inp) inp.click();
+  }
+  (function () {
+    var inp = document.getElementById('projImageInput');
+    if (inp) inp.addEventListener('change', function () {
+      if (this.files && this.files[0]) fileToProject(this.files[0]);
+      this.value = '';
+    });
+    // Ctrl+V an image anywhere -> new project (or fill an empty "＋" tab).
+    // Ignore paste into text inputs / paste with no image (don't hijack text).
+    document.addEventListener('paste', function (e) {
+      var t = e.target;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName))) return;
+      var items = (e.clipboardData && e.clipboardData.items) || [];
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type && items[i].type.indexOf('image/') === 0) {
+          var f = items[i].getAsFile();
+          if (f) {
+            e.preventDefault();
+            var r = new FileReader();
+            r.onload = function () { imageToProject(r.result); };   // new-or-fill
+            r.readAsDataURL(f);
+            return;
+          }
+        }
+      }
+    });
+  })();
+
+  function renderProjectTabs() {
+    var host = document.getElementById('projectTabs');
+    if (!host) return;
+    var tabs = order.map(function (id) {
+      var r = projects[id]; if (!r) return '';
+      var badge = r.mode === 'blank' ? '<span class="badge">картинка</span>' : '';
+      var dup = '<button class="x" data-dup="' + id + '" title="Дублировать">⧉</button>';
+      var x = order.length > 1 ? '<button class="x" data-close="' + id + '" title="Закрыть">×</button>' : '';
+      return '<div class="ptab' + (id === activeId ? ' active' : '') + '" data-proj="' + id + '">' +
+        '<span class="nm" title="Двойной клик — переименовать">' + esc(r.name) + '</span>' + badge + dup + x + '</div>';
+    }).join('');
+    host.innerHTML = tabs + '<button class="ptab-add" id="ptabAdd" title="Новый проект (вставьте картинку)">＋</button>';
+  }
+
 
   function agoStr(t) {
     var s = Math.round((Date.now() - t) / 1000);
@@ -553,9 +832,16 @@
       fColor('Подложка фото', 'theme.imgBg')
     ].join('');
 
+    var hasBg = !!(state.canvas && state.canvas.bgImage);
     var frame =
-      '<div class="grid2">' + fNum('Ширина', 'canvas.width', 280, 900, 1) +
-      fNum('Высота', 'canvas.height', 300, 2000, 1) + '</div>' +
+      '<div class="grid2">' + fNum('Ширина', 'canvas.width', 280, 2000, 1) +
+      fNum('Высота', 'canvas.height', 300, 3000, 1) + '</div>' +
+      (hasBg
+        ? '<div class="sub">Фон-картинка</div>' +
+          fRange('Прозрачность фона (обводка)', 'canvas.bgOpacity', 0.1, 1, 0.05) +
+          '<div class="chk-row"><button class="btn sm" data-act="replaceBg">Заменить</button>' +
+          '<button class="btn sm ghost" data-act="clearBg">Убрать фон</button></div>'
+        : '<button class="btn sm add" data-act="addBg">🖼 Задать фон-картинку</button>') +
       fCheck('Показывать полосу прокрутки', 'canvas.scrollbar') +
       fRange('Положение полосы', 'canvas.scrollTop', 0, 0.9, 0.01) +
       fRange('Высота ползунка', 'canvas.scrollThumb', 0.1, 1, 0.01);
@@ -752,6 +1038,10 @@
       state.shipping.options.push({ kind: 'custom', selected: false, badge: '', title: 'Nuova opzione', price: '0,00 €', button: '', carrier: '', carrierLogo: '' });
     } else if (act === 'delOpt') {
       state.shipping.options.splice(Number(b.dataset.i), 1);
+    } else if (act === 'addBg' || act === 'replaceBg') {
+      pickBgForActive(); return;                 // opens the image picker (async)
+    } else if (act === 'clearBg') {
+      state.canvas.bgImage = ''; rebuildForm(); renderPreview(); return;
     } else if (act === 'clear') {
       setPath(state, b.dataset.path, '');
       // removing the custom QR image must fall back to the generated one
@@ -1090,6 +1380,39 @@
     t.addEventListener('click', function () { switchTab(t.dataset.tab); });
   });
 
+  /* project-tab strip: one delegated listener (innerHTML is rebuilt each render) */
+  (function () {
+    var host = document.getElementById('projectTabs');
+    if (!host) return;
+    host.addEventListener('click', function (e) {
+      var add = e.target.closest('#ptabAdd');
+      if (add) { pickImageForNewProject(); return; }
+      var dup = e.target.closest('[data-dup]');
+      if (dup) { e.stopPropagation(); duplicateProject(dup.dataset.dup); return; }
+      var x = e.target.closest('[data-close]');
+      if (x) { e.stopPropagation(); closeProject(x.dataset.close); return; }
+      var tab = e.target.closest('.ptab');
+      if (tab) switchProject(tab.dataset.proj);
+    });
+    host.addEventListener('dblclick', function (e) {
+      var nm = e.target.closest('.nm');
+      var tab = e.target.closest('.ptab');
+      if (!nm || !tab) return;
+      var id = tab.dataset.proj;
+      nm.setAttribute('contenteditable', 'true'); nm.focus();
+      document.execCommand && document.execCommand('selectAll', false, null);
+      function done() {
+        nm.removeAttribute('contenteditable');
+        renameProject(id, nm.textContent);
+      }
+      nm.addEventListener('blur', done, { once: true });
+      nm.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); nm.blur(); }
+        if (ev.key === 'Escape') { ev.preventDefault(); nm.textContent = projects[id] ? projects[id].name : ''; nm.blur(); }
+      });
+    });
+  })();
+
   function parserRender() {
     var el = document.getElementById('parserPreview');
     var wrap = document.getElementById('parserWrap');
@@ -1181,7 +1504,10 @@
   /* ===================================================================== */
   var ADD_LABELS = { text: 'Текст', box: 'Блок / карточка', image: 'Картинка',
     row: 'Строка «цена»', btn: 'Кнопка', badge: 'Бейдж', info: 'Инфо-блок', line: 'Линия',
-    link: 'Ссылка' };
+    link: 'Ссылка', price: 'Цена', title: 'Название', total: 'Итого' };
+  // token-blocks: a text element pre-filled with a {{token}} that the parser/API
+  // fills from a Subito link — works on any (image-)template.
+  var TOKEN_ADD = { link: '{{link}}', price: '{{price}}', title: '{{title}}', total: '{{total}}' };
   var placing = null, selId = null;
 
   function setPlacing(type) {
@@ -1194,13 +1520,15 @@
 
   function addCustom(type, x, y) {
     state.custom = state.custom || [];
-    // "Ссылка" is just a text element carrying the {{link}} placeholder, so it
-    // can be dropped anywhere and styled like any other text.
-    var real = type === 'link' ? 'text' : type;
+    // token-blocks (Ссылка/Цена/Название/Итого) are just text elements carrying
+    // a {{token}}; they can be dropped anywhere and styled like any other text.
+    var tok = TOKEN_ADD[type];
+    var real = tok ? 'text' : type;
     var d = (window.CUSTOM_DEFAULTS || {})[real] || {};
     var c = { id: uid(), type: real, x: Math.max(0, x), y: Math.max(0, y) };
     Object.keys(d).forEach(function (k) { c[k] = d[k]; });
-    if (type === 'link') { c.text = '{{link}}'; c.color = '#1a73e8'; c.w = 300; c.size = 12; }
+    if (tok) { c.text = tok; c.w = 300; c.size = (type === 'price' || type === 'total') ? 18 : 14;
+      if (type === 'link') { c.color = '#1a73e8'; c.size = 12; } }
     markChange('Добавлен элемент: ' + ADD_LABELS[type]);
     state.custom.push(c);
     rebuildForm(); renderPreview(); selectCustom(c.id);
@@ -1703,9 +2031,11 @@
   };
 
   /* ---- boot ------------------------------------------------------------ */
+  initProjects();               // adopt the active project's doc into `state`
   buildForm();
   markChange('Начальное состояние');
   renderPreview();
+  renderProjectTabs();
   renderParserOpts();
   updateRestoreBtn();
   // (re)render the QR with the styled engine if it's on

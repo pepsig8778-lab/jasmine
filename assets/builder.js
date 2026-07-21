@@ -28,12 +28,13 @@
   /* ----------------------------------------------------------------------- */
   var SCREEN_CSS = [
 '.screen{',
-'  position:relative;box-sizing:border-box;overflow:hidden;',
+'  position:relative;box-sizing:border-box;overflow:hidden;isolation:isolate;',
 '  background:var(--page-bg);color:var(--text);',
 '  font-family:var(--font,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif);',
 '  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;',
 '  font-size:14px;line-height:1.3;letter-spacing:0;}',
 '.screen *{box-sizing:border-box;}',
+'.sc-bg{position:absolute;inset:0;z-index:-1;background-position:center;background-size:cover;background-repeat:no-repeat;pointer-events:none;}',
 
 /* ---- header ---- */
 '.sc-header{display:flex;align-items:center;gap:14px;height:52px;',
@@ -574,7 +575,15 @@
     var overlay = '';
     if (q && q.position === 'corner') overlay = buildQRCorner(q);
     else if (q && q.position === 'free') overlay = buildQRFree(q);
-    return flowHeader + body + buildScrollbar(cfg.canvas || {}) + freeHtml +
+
+    // Background image layer (z-index:-1) — a pasted screenshot for "any
+    // template" projects. Data URLs contain no ', so url('...') is safe.
+    var cv = cfg.canvas || {};
+    var bgHtml = cv.bgImage
+      ? '<div class="sc-bg" style="background-image:url(\'' + cv.bgImage + '\');opacity:' +
+        (cv.bgOpacity == null ? 1 : cv.bgOpacity) + '"></div>' : '';
+
+    return bgHtml + flowHeader + body + buildScrollbar(cfg.canvas || {}) + freeHtml +
       buildCustom(cfg) + overlay;
   }
 

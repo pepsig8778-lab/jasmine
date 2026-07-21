@@ -36,6 +36,27 @@
   .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;
     font-size:11px;color:var(--ink-dim);}
 
+  /* ---------------- project tabs (multi-document) ---------------- */
+  .project-tabs{display:flex;align-items:center;gap:5px;padding:6px 12px;flex:0 0 auto;
+    background:#0e131f;border-bottom:1px solid var(--line);overflow-x:auto;z-index:4;}
+  .project-tabs::-webkit-scrollbar{height:6px;}
+  .project-tabs::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .ptab{display:flex;align-items:center;gap:7px;background:var(--panel);color:var(--ink-dim);
+    border:1px solid var(--line);border-radius:9px;padding:6px 10px;font-size:12.5px;
+    font-family:inherit;cursor:pointer;white-space:nowrap;max-width:220px;transition:.12s;}
+  .ptab:hover{color:var(--ink);border-color:var(--field-line);}
+  .ptab.active{background:var(--panel-2);color:var(--ink);border-color:var(--accent-2);
+    box-shadow:0 2px 10px rgba(79,124,255,.2);}
+  .ptab .nm{overflow:hidden;text-overflow:ellipsis;max-width:150px;outline:none;}
+  .ptab .badge{font-size:9px;opacity:.6;text-transform:uppercase;letter-spacing:.4px;}
+  .ptab .x{border:0;background:transparent;color:var(--ink-dim);cursor:pointer;font-size:14px;
+    line-height:1;padding:0 2px;border-radius:4px;font-family:inherit;}
+  .ptab .x:hover{color:#fff;background:var(--accent);}
+  .ptab-add{border:1px dashed var(--field-line);background:transparent;color:var(--ink-dim);
+    cursor:pointer;font-size:16px;line-height:1;width:30px;height:30px;border-radius:9px;
+    font-family:inherit;flex:0 0 auto;transition:.12s;}
+  .ptab-add:hover{color:var(--ink);border-color:var(--accent-2);background:rgba(79,124,255,.1);}
+
   .views{flex:1;position:relative;min-height:0;}
   .view{position:absolute;inset:0;}
   .view:not(.active){display:none !important;}
@@ -350,6 +371,8 @@
     </nav>
   </header>
 
+  <div class="project-tabs" id="projectTabs"><!-- generated: one .ptab per project + ＋ --></div>
+
   <div class="views">
     <!-- ============ CONSTRUCTOR ============ -->
     <section id="view-builder" class="view active">
@@ -368,6 +391,7 @@
           <p class="saved-note wide">💾 Шаблон хранится в вашем браузере и <b>не сбрасывается</b>
             при обновлении сайта. Для переноса — «Скачать JSON».</p>
           <input type="file" id="importFile" accept="application/json" hidden>
+          <input type="file" id="projImageInput" accept="image/*" hidden>
         </div>
       </aside>
 
@@ -387,6 +411,9 @@
                 <button class="add-it" data-add="info"><b>💬</b>Инфо-блок</button>
                 <button class="add-it" data-add="line"><b>➖</b>Линия</button>
                 <button class="add-it" data-add="link"><b>🔗</b>Ссылка {{link}}</button>
+                <button class="add-it" data-add="price"><b>💶</b>Цена {{price}}</button>
+                <button class="add-it" data-add="title"><b>🏷</b>Название {{title}}</button>
+                <button class="add-it" data-add="total"><b>Σ</b>Итого {{total}}</button>
               </div>
             </div>
           </div>
